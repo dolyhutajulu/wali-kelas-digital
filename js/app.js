@@ -1,0 +1,2903 @@
+// app.js - Main Application logic, Routing, and Page Renderers for WaliKelas Digital
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Check if store loaded
+  if (!window.WaliKelasStore) {
+    console.error('WaliKelasStore is not loaded!');
+    return;
+  }
+  
+  const store = window.WaliKelasStore;
+  
+  // --- TOAST NOTIFICATION SYSTEM ---
+  window.showToast = function(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+
+    let iconClass = 'fa-check-circle';
+    if (type === 'error') iconClass = 'fa-exclamation-circle';
+    if (type === 'info') iconClass = 'fa-info-circle';
+    if (type === 'warning') iconClass = 'fa-exclamation-triangle';
+
+    toast.innerHTML = `
+      <i class="fas ${iconClass}"></i>
+      <span style="flex: 1; line-height: 1.4;">${message}</span>
+      <button class="toast-close"><i class="fas fa-times"></i></button>
+    `;
+
+    container.appendChild(toast);
+
+    // Trigger CSS slide-in transition
+    setTimeout(() => {
+      toast.classList.add('show');
+    }, 10);
+
+    // Auto dismiss after 3 seconds
+    const dismissTimer = setTimeout(() => {
+      dismissToast(toast);
+    }, 3000);
+
+    // Close button event handler
+    toast.querySelector('.toast-close').onclick = () => {
+      clearTimeout(dismissTimer);
+      dismissToast(toast);
+    };
+  };
+
+  function dismissToast(toast) {
+    toast.classList.remove('show');
+    toast.style.opacity = '0';
+    toast.style.marginTop = `-${toast.offsetHeight}px`;
+    setTimeout(() => {
+      toast.remove();
+    }, 350);
+  }
+
+  // Override native alert with modern toast notifications
+  window.alert = function(message) {
+    const lower = message.toLowerCase();
+    let type = 'info';
+    if (lower.includes('berhasil') || lower.includes('sukses') || lower.includes('kembali') || lower.includes('telah')) {
+      type = 'success';
+    } else if (lower.includes('gagal') || lower.includes('salah') || lower.includes('wajib') || lower.includes('belum') || lower.includes('pilih') || lower.includes('tidak ada')) {
+      type = 'warning';
+    }
+    window.showToast(message, type);
+  };
+
+  // DOM Elements
+  const appContainer = document.getElementById('app-container');
+  const authScreen = document.getElementById('auth-screen');
+  const loginForm = document.getElementById('login-form');
+  const pinInput = document.getElementById('pin-input');
+  const pinToggle = document.getElementById('pin-toggle');
+  
+  const sidebar = document.querySelector('.sidebar');
+  const sidebarOverlay = document.querySelector('.sidebar-overlay');
+  const menuToggle = document.querySelector('.menu-toggle');
+  
+  const navLinks = document.querySelectorAll('.menu-item a, .bottom-nav-item');
+  const pages = document.querySelectorAll('.page-view');
+  
+  const headerTitle = document.getElementById('header-title');
+  const headerSubtitle = document.getElementById('header-subtitle');
+  const classBadge = document.getElementById('class-badge');
+  const userNameEl = document.getElementById('user-name');
+  
+  const logoutBtns = document.querySelectorAll('#logout-btn, #logout-btn-mobile');
+  
+  // CURRENT STATE VARIABLES
+  let currentActivePage = 'dashboard';
+  let attendanceSelectedDate = new Date().toISOString().split('T')[0];
+  let financeSelectedStudentId = '';
+  let gradeGridSubjectId = '';            // currently selected subject in the grid input
+  let pendingAssessmentRerender = null;   // callback after adding an assessment component
+  const selectedStudentIds = new Set();   // buku induk bulk-selection state
+
+  // --- AUTHENTICATION FLOW ---
+  // PIN/Password visibility toggle
+  if (pinToggle) {
+    pinToggle.addEventListener('click', () => {
+      const type = pinInput.getAttribute('type') === 'password' ? 'text' : 'password';
+      pinInput.setAttribute('type', type);
+      const icon = pinToggle.querySelector('i');
+      if (icon) {
+        icon.className = type === 'password' ? 'fas fa-eye' : 'fas fa-eye-slash';
+      }
+    });
+  }
+
+  // Handle Login Submit
+  if (loginForm) {
+    loginForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const enteredPin = pinInput.value;
+      if (store.checkPassword(enteredPin)) {
+        // Authenticated!
+        authScreen.classList.add('hidden');
+        sessionStorage.setItem('authenticated', 'true');
+        initApp();
+      } else {
+        alert('PIN/Password Wali Kelas salah!');
+        pinInput.value = '';
+        pinInput.focus();
+      }
+    });
+  }
+
+  // Auto Login Check (if session already authenticated)
+  if (sessionStorage.getItem('authenticated') === 'true') {
+    authScreen.classList.add('hidden');
+    initApp();
+  }
+
+  // Handle Logout
+  logoutBtns.forEach(btn => {
+    if (btn) {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (confirm('Apakah Anda ingin mengunci sistem?')) {
+          sessionStorage.removeItem('authenticated');
+          authScreen.classList.remove('hidden');
+          pinInput.value = '';
+        }
+      });
+    }
+  });
+
+  // --- APP INITIALIZATION ---
+  function initApp() {
+    updateHeaderBadge();
+    populateSubjectDropdowns();
+    
+    // Register routing events
+    navLinks.forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const targetPage = link.getAttribute('href').substring(1);
+        navigateToPage(targetPage);
+        
+        // On mobile, close sidebar drawer
+        sidebar.classList.remove('active');
+        sidebarOverlay.classList.remove('active');
+      });
+    });
+
+    // Mobile Sidebar Drawer Toggle
+    if (menuToggle) {
+      menuToggle.addEventListener('click', () => {
+        sidebar.classList.add('active');
+        sidebarOverlay.classList.add('active');
+      });
+    }
+    
+    if (sidebarOverlay) {
+      sidebarOverlay.addEventListener('click', () => {
+        sidebar.classList.remove('active');
+        sidebarOverlay.classList.remove('active');
+      });
+    }
+
+    // Default route
+    const hash = window.location.hash.substring(1);
+    navigateToPage(hash || 'dashboard');
+    
+    // Initialize common event listeners once
+    initEventListeners();
+  }
+
+  function updateHeaderBadge() {
+    if (classBadge) {
+      classBadge.innerText = `${store.state.settings.className} | ${store.state.settings.academicYear}`;
+    }
+    if (userNameEl) {
+      userNameEl.innerText = store.state.settings.schoolName;
+    }
+  }
+
+  // --- ROUTING ---
+  function navigateToPage(pageId) {
+    if (!document.getElementById(pageId)) return;
+    
+    currentActivePage = pageId;
+    window.location.hash = pageId;
+
+    // Update active class on nav links
+    navLinks.forEach(link => {
+      const href = link.getAttribute('href').substring(1);
+      if (href === pageId) {
+        link.parentElement.classList.add('active');
+        link.classList.add('active'); // Bottom nav uses it directly
+      } else {
+        link.parentElement.classList.remove('active');
+        link.classList.remove('active');
+      }
+    });
+
+    // Toggle Pages visibility
+    pages.forEach(page => {
+      if (page.id === pageId) {
+        page.classList.add('active');
+      } else {
+        page.classList.remove('active');
+      }
+    });
+
+    // Page-specific header text & renders
+    let titleText = 'Dashboard';
+    let subtitleText = 'Ringkasan aktivitas hari ini';
+
+    switch (pageId) {
+      case 'dashboard':
+        titleText = 'WaliKelas Dashboard';
+        subtitleText = 'Ringkasan aktivitas dan kondisi kelas';
+        renderDashboard();
+        break;
+      case 'students':
+        titleText = 'Buku Induk Kelas';
+        subtitleText = 'Manajemen profil dan data murid';
+        renderStudents();
+        break;
+      case 'attendance':
+        titleText = 'Kehadiran Murid';
+        subtitleText = 'Presensi harian dan rekap rapor';
+        renderAttendance();
+        break;
+      case 'grades':
+        titleText = 'Nilai & Akademik';
+        subtitleText = 'Input nilai tugas harian, ujian & sikap';
+        renderGrades();
+        break;
+      case 'finance':
+        titleText = 'Keuangan Kelas';
+        subtitleText = 'Manajemen kas kelas dan tabungan siswa';
+        renderFinance();
+        break;
+      case 'schedule':
+        titleText = 'Jadwal & Agenda';
+        subtitleText = 'Jadwal pelajaran, piket & kalender sekolah';
+        renderSchedule();
+        break;
+      case 'communication':
+        titleText = 'Buku Penghubung Digital';
+        subtitleText = 'Papan pengumuman & galeri orang tua';
+        renderCommunication();
+        break;
+      case 'settings':
+        titleText = 'Pengaturan Aplikasi';
+        subtitleText = 'Kelola kurikulum, backup data & profil kelas';
+        renderSettings();
+        break;
+    }
+
+    if (headerTitle) headerTitle.innerText = titleText;
+    if (headerSubtitle) headerSubtitle.innerText = subtitleText;
+  }
+
+  // --- RENDER PAGE: DASHBOARD ---
+  function renderDashboard() {
+    const totalStudents = store.state.students.length;
+    document.getElementById('dash-stat-students').innerText = totalStudents;
+
+    // Today's attendance percentage
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayLogs = store.getAttendance(todayStr);
+    let presentCount = 0;
+    
+    Object.values(todayLogs).forEach(status => {
+      if (status === 'H') presentCount++;
+    });
+
+    const attPercentage = totalStudents > 0 
+      ? Math.round((presentCount / totalStudents) * 100) 
+      : 100;
+
+    document.getElementById('dash-stat-attendance').innerText = totalStudents > 0
+      ? `${presentCount}/${totalStudents} (${attPercentage}%)`
+      : '0 Murid';
+
+    // Savings and Cash balances
+    let totalSavings = 0;
+    Object.values(store.state.savings).forEach(sav => {
+      totalSavings += sav.balance || 0;
+    });
+
+    document.getElementById('dash-stat-savings').innerText = formatRupiah(totalSavings);
+    document.getElementById('dash-stat-cash').innerText = formatRupiah(store.state.classCash.balance);
+
+    // Dashboard actions click handlers
+    document.getElementById('action-absen').onclick = () => navigateToPage('attendance');
+    document.getElementById('action-nilai').onclick = () => navigateToPage('grades');
+    document.getElementById('action-kas').onclick = () => navigateToPage('finance');
+    document.getElementById('action-siswa').onclick = () => {
+      navigateToPage('students');
+      openModal('modal-student-form');
+      document.getElementById('student-form-title').innerText = 'Tambah Murid Baru';
+      document.getElementById('student-form').reset();
+      document.getElementById('student-id').value = '';
+    };
+
+    // Render Recent Logs Feed (simulation of school events and cash changes)
+    const feedContainer = document.getElementById('dashboard-feed-list');
+    feedContainer.innerHTML = '';
+
+    const feedItems = [];
+
+    // Add recent cash transactions
+    store.state.classCash.history.slice(0, 3).forEach(tx => {
+      feedItems.push({
+        title: tx.note,
+        desc: `${tx.type === 'in' ? 'Pemasukan' : 'Pengeluaran'} Kas: ${formatRupiah(tx.amount)}`,
+        date: formatDate(tx.date),
+        type: tx.type === 'in' ? 'success' : 'warning',
+        timestamp: new Date(tx.date).getTime()
+      });
+    });
+
+    // Add recent announcements
+    store.state.announcements.slice(0, 2).forEach(ann => {
+      feedItems.push({
+        title: `Pengumuman: ${ann.title}`,
+        desc: ann.content.substring(0, 60) + '...',
+        date: formatDate(ann.date),
+        type: 'primary',
+        timestamp: new Date(ann.date).getTime()
+      });
+    });
+
+    // Add calendar events
+    store.state.schedule.calendar.slice(0, 2).forEach(event => {
+      feedItems.push({
+        title: `Agenda: ${event.title}`,
+        desc: `Jenis: ${event.type === 'holiday' ? 'Hari Libur' : event.type === 'exam' ? 'Ujian' : 'Kegiatan'}`,
+        date: formatDate(event.date),
+        type: event.type === 'holiday' ? 'danger' : 'info',
+        timestamp: new Date(event.date).getTime()
+      });
+    });
+
+    // Sort feed items by date desc
+    feedItems.sort((a, b) => b.timestamp - a.timestamp);
+
+    if (feedItems.length === 0) {
+      feedContainer.innerHTML = '<div class="text-muted text-center py-3">Tidak ada aktivitas baru hari ini.</div>';
+    } else {
+      feedItems.slice(0, 5).forEach(item => {
+        const div = document.createElement('div');
+        div.className = `feed-item ${item.type}`;
+        div.innerHTML = `
+          <div class="feed-content">
+            <h4>${item.title}</h4>
+            <p>${item.desc}</p>
+          </div>
+          <div class="feed-date">${item.date}</div>
+        `;
+        feedContainer.appendChild(div);
+      });
+    }
+  }
+
+  // --- RENDER PAGE: STUDENTS ---
+  function renderStudents() {
+    const tableBody = document.getElementById('student-list-table-body');
+    const searchVal = document.getElementById('search-student').value.toLowerCase();
+    tableBody.innerHTML = '';
+
+    const filtered = store.state.students.filter(student => 
+      student.name.toLowerCase().includes(searchVal) ||
+      (student.nis && student.nis.toLowerCase().includes(searchVal)) ||
+      (student.nisn && student.nisn.toLowerCase().includes(searchVal))
+    );
+
+    // Drop selections for students no longer present.
+    const existingIds = new Set(store.state.students.map(s => s.id));
+    Array.from(selectedStudentIds).forEach(id => { if (!existingIds.has(id)) selectedStudentIds.delete(id); });
+
+    if (filtered.length === 0) {
+      tableBody.innerHTML = '<tr><td colspan="10" class="text-center py-4 text-muted">Tidak ada data murid ditemukan.</td></tr>';
+      updateStudentsBulkBar();
+      return;
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    filtered.forEach((student, idx) => {
+      const isFemale = student.gender === 'P';
+      const tr = document.createElement('tr');
+      const isSelected = selectedStudentIds.has(student.id);
+      
+      // Attendance status today
+      const todayLogs = store.getAttendance(todayStr);
+      const activeStatus = todayLogs[student.id] || '';
+
+      // Balance
+      const balance = store.getSavings(student.id).balance;
+      const formatRupiahShort = (val) => {
+        if (val >= 1000000) return 'Rp' + (val / 1000000).toFixed(1).replace('.0', '') + 'Jt';
+        if (val >= 1000) return 'Rp' + (val / 1000).toFixed(0) + 'Rb';
+        return 'Rp' + val;
+      };
+      
+      // Avg Grade (weighted, current subjects only — ignores orphaned data)
+      const overallAvg = store.getStudentOverallAverage(student.id);
+      const avgGrade = overallAvg === null ? '-' : overallAvg;
+      const kkm = store.getKkm();
+      const avgColor = overallAvg === null
+        ? 'var(--text-muted)'
+        : (overallAvg < kkm ? 'var(--danger)' : 'var(--primary)');
+
+      // Att Percent
+      const attSummary = store.getStudentAttendanceSummary(student.id);
+      const attPercent = attSummary.percentage + '%';
+
+      tr.innerHTML = `
+        <td data-label="Pilih" style="text-align:center;"><input type="checkbox" class="student-select-cb" ${isSelected ? 'checked' : ''} style="cursor:pointer;"></td>
+        <td data-label="No">${idx + 1}</td>
+        <td data-label="Nama Murid">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="student-card-avatar ${isFemale ? 'female' : ''}" style="width: 32px; height: 32px; font-size: 0.85rem; flex-shrink: 0;">
+              ${student.name.charAt(0)}
+            </div>
+            <strong>${student.name}</strong>
+          </div>
+        </td>
+        <td data-label="NIS / NISN">
+          <span style="font-size: 0.85rem; color: var(--text-muted); display: block;">NIS: ${student.nis || '-'}</span>
+          <span style="font-size: 0.85rem; color: var(--text-muted); display: block;">NISN: ${student.nisn || '-'}</span>
+        </td>
+        <td data-label="L/P" style="text-align: center;">${student.gender}</td>
+        <td data-label="Presensi Hari Ini">
+          <div class="attendance-button-group" style="gap: 3px; justify-content: center;">
+            <button class="attendance-btn mini h ${activeStatus === 'H' ? 'active' : ''}" data-status="H" style="width: 25px; height: 25px; font-size: 0.7rem;">H</button>
+            <button class="attendance-btn mini s ${activeStatus === 'S' ? 'active' : ''}" data-status="S" style="width: 25px; height: 25px; font-size: 0.7rem;">S</button>
+            <button class="attendance-btn mini i ${activeStatus === 'I' ? 'active' : ''}" data-status="I" style="width: 25px; height: 25px; font-size: 0.7rem;">I</button>
+            <button class="attendance-btn mini a ${activeStatus === 'A' ? 'active' : ''}" data-status="A" style="width: 25px; height: 25px; font-size: 0.7rem;">A</button>
+          </div>
+        </td>
+        <td data-label="Tabungan" style="text-align: right; font-weight: 600; color: var(--success);">${formatRupiahShort(balance)}</td>
+        <td data-label="Rata Nilai" style="text-align: center; font-weight: 600; color: ${avgColor};">${avgGrade}</td>
+        <td data-label="Kehadiran" style="text-align: center; font-weight: 600; color: var(--info);">${attPercent}</td>
+        <td data-label="Aksi Cepat">
+          <div style="display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
+            <button class="btn btn-secondary quick-grade-btn" title="Input Nilai Cepat" style="padding: 5px 8px; font-size: 0.7rem;"><i class="fas fa-award"></i> +Nilai</button>
+            <button class="btn btn-secondary quick-saving-btn" title="Transaksi Tabungan Cepat" style="padding: 5px 8px; font-size: 0.7rem;"><i class="fas fa-piggy-bank"></i> +Tabung</button>
+            <button class="btn btn-secondary detail-btn" title="Detail Murid" style="padding: 5px 8px; font-size: 0.7rem;"><i class="fas fa-eye"></i></button>
+            <button class="btn btn-primary edit-btn" title="Edit Murid" style="padding: 5px 8px; font-size: 0.7rem;"><i class="fas fa-edit"></i></button>
+            <button class="btn btn-danger delete-btn" title="Hapus Murid" style="padding: 5px 8px; font-size: 0.7rem; background-color: var(--danger); border-color: var(--danger);"><i class="fas fa-trash-alt"></i></button>
+          </div>
+        </td>
+      `;
+      
+      // Bind Detail action
+      tr.querySelector('.detail-btn').onclick = () => showStudentDetails(student.id);
+      
+      // Bind Edit action
+      tr.querySelector('.edit-btn').onclick = () => showEditStudentForm(student.id);
+
+      // Bind row checkbox selection
+      const cb = tr.querySelector('.student-select-cb');
+      if (cb) {
+        cb.onclick = (e) => e.stopPropagation();
+        cb.onchange = () => {
+          if (cb.checked) selectedStudentIds.add(student.id);
+          else selectedStudentIds.delete(student.id);
+          updateStudentsBulkBar();
+        };
+      }
+
+      // Bind Delete action
+      tr.querySelector('.delete-btn').onclick = () => {
+        confirmAction({
+          title: 'Hapus Murid',
+          message: `Hapus murid <strong>${student.name}</strong> secara permanen?`,
+          summaryHtml: studentImpactSummary(student.id),
+          confirmLabel: 'Hapus Permanen',
+          onConfirm: () => {
+            const res = store.deleteStudent(student.id);
+            if (res.success) {
+              selectedStudentIds.delete(student.id);
+              alert(`Murid "${student.name}" berhasil dihapus!`);
+              renderStudents();
+              renderDashboard();
+              renderGradesRecap();
+            } else {
+              alert(`Gagal menghapus murid: ${res.error}`);
+            }
+          }
+        });
+      };
+
+      // Bind Quick Grade action
+      tr.querySelector('.quick-grade-btn').onclick = () => showQuickGradeModal(student.id);
+
+      // Bind Quick Saving action
+      tr.querySelector('.quick-saving-btn').onclick = () => showQuickSavingModal(student.id);
+
+      // Bind Today Attendance action buttons
+      tr.querySelectorAll('.attendance-btn').forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          const status = btn.getAttribute('data-status');
+          const isAlreadyActive = btn.classList.contains('active');
+          const attendanceMap = store.getAttendance(todayStr);
+
+          if (isAlreadyActive) {
+            delete attendanceMap[student.id];
+          } else {
+            attendanceMap[student.id] = status;
+          }
+
+          store.saveAttendance(todayStr, attendanceMap);
+          renderStudents();
+          renderDashboard();
+        };
+      });
+
+      tableBody.appendChild(tr);
+    });
+
+    // Sync select-all checkbox to the currently visible rows.
+    const selectAll = document.getElementById('students-select-all');
+    if (selectAll) {
+      const visibleSelected = filtered.filter(s => selectedStudentIds.has(s.id)).length;
+      selectAll.checked = filtered.length > 0 && visibleSelected === filtered.length;
+      selectAll.indeterminate = visibleSelected > 0 && visibleSelected < filtered.length;
+    }
+    updateStudentsBulkBar();
+  }
+
+  // Build an impact summary (grades / attendance / savings) for delete dialogs.
+  function studentImpactSummary(studentId) {
+    const im = store.getStudentImpact(studentId);
+    return `<div class="card" style="padding:10px 12px; background: var(--bg-main); font-size:0.82rem; color: var(--text-muted);">
+      Ikut terhapus permanen: <strong>${im.gradeCount}</strong> nilai · <strong>${im.attendanceDays}</strong> hari presensi · <strong>${im.savingsTx}</strong> transaksi tabungan.
+    </div>`;
+  }
+
+  function updateStudentsBulkBar() {
+    const bar = document.getElementById('students-bulk-bar');
+    const countEl = document.getElementById('students-selected-count');
+    if (!bar || !countEl) return;
+    const n = selectedStudentIds.size;
+    if (n === 0) {
+      bar.style.display = 'none';
+    } else {
+      bar.style.display = 'flex';
+      countEl.textContent = `${n} murid dipilih`;
+    }
+  }
+
+  function showStudentDetails(studentId) {
+    const student = store.getStudent(studentId);
+    if (!student) return;
+
+    const modal = document.getElementById('modal-student-detail');
+    const detailsContainer = document.getElementById('student-detail-content');
+    
+    // Calculate attendance summary
+    const att = store.getStudentAttendanceSummary(studentId);
+    
+    // Savings balance
+    const sav = store.getSavings(studentId);
+
+    // Format dates
+    const dobFormatted = `${student.pob}, ${formatDate(student.dob)}`;
+
+    // Academic + character data
+    const char = store.getCharacter(studentId);
+    const subjects = store.getSubjects();
+    const kkm = store.getKkm();
+    const overallAvg = store.getStudentOverallAverage(studentId);
+
+    const gradeCats = store.getGradeCategories();
+    const gradeRows = subjects.map(s => {
+      const avg = store.getSubjectAverage(studentId, s.id);
+      const catAvgs = store.getSubjectCategoryAverages(studentId, s.id);
+      // Per-category breakdown, e.g. "Tugas 80 (3) · UH 75 · UTS 70 · UAS 75"
+      const detail = gradeCats.map(c => {
+        const d = catAvgs[c.id];
+        if (d.avg === null) return `${c.name}: –`;
+        const cnt = (c.multi && d.count > 1) ? ` (${d.count}×)` : '';
+        return `${c.name}: ${d.avg}${cnt}`;
+      }).join(' · ');
+      const color = (avg !== null && avg < kkm) ? 'var(--danger)' : 'var(--primary)';
+      const status = avg === null ? '' : (avg < kkm ? ' · Belum Tuntas' : ' · Tuntas');
+      return `<div class="details-row"><span class="details-label">${s.name}<br><span style="font-size:0.7rem;color:var(--text-muted);">${detail}</span></span><span class="details-value" style="font-weight:700;color:${color};">${avg === null ? '-' : avg}<span style="font-size:0.7rem;font-weight:500;">${status}</span></span></div>`;
+    }).join('');
+
+    const savHistory = (sav.history || []).slice(0, 6).map(tx => {
+      const sign = tx.type === 'deposit' ? '+' : '−';
+      const c = tx.type === 'deposit' ? 'var(--success)' : 'var(--danger)';
+      return `<div class="details-row"><span class="details-label">${formatDate(tx.date)}<br><span style="font-size:0.7rem;color:var(--text-muted);">${tx.note || ''}</span></span><span class="details-value" style="color:${c};font-weight:600;">${sign} ${formatRupiah(tx.amount)}</span></div>`;
+    }).join('') || '<p class="text-muted" style="font-size:0.85rem; padding: 6px 0;">Belum ada transaksi tabungan.</p>';
+
+    detailsContainer.innerHTML = `
+      <div class="tabs-container" style="margin-bottom:15px;">
+        <button class="tab-btn subtab active" data-subtab="subtab-profil">Profil</button>
+        <button class="tab-btn subtab" data-subtab="subtab-ortu">Orang Tua</button>
+        <button class="tab-btn subtab" data-subtab="subtab-catatan">Catatan/Karakter</button>
+        <button class="tab-btn subtab" data-subtab="subtab-akademik">Akademik</button>
+      </div>
+
+      <div id="subtab-profil" class="tab-content-panel active">
+        <div class="details-list">
+          <div class="details-row"><span class="details-label">Nama Lengkap</span><span class="details-value">${student.name}</span></div>
+          <div class="details-row"><span class="details-label">NIS / NISN</span><span class="details-value">${student.nis} / ${student.nisn}</span></div>
+          <div class="details-row"><span class="details-label">Jenis Kelamin</span><span class="details-value">${student.gender === 'L' ? 'Laki-laki' : 'Perempuan'}</span></div>
+          <div class="details-row"><span class="details-label">TTL</span><span class="details-value">${dobFormatted}</span></div>
+          <div class="details-row"><span class="details-label">Agama</span><span class="details-value">${student.religion}</span></div>
+          <div class="details-row"><span class="details-label">Alamat Rumah</span><span class="details-value">${student.address}</span></div>
+        </div>
+      </div>
+
+      <div id="subtab-ortu" class="tab-content-panel">
+        <div class="details-list">
+          <div class="details-row"><span class="details-label">Nama Orang Tua</span><span class="details-value">${student.parentName}</span></div>
+          <div class="details-row"><span class="details-label">Pekerjaan</span><span class="details-value">${student.parentJob || '-'}</span></div>
+          <div class="details-row"><span class="details-label">Alamat Wali</span><span class="details-value">${student.parentAddress || student.address}</span></div>
+          <div class="details-row"><span class="details-label">No. WhatsApp</span><span class="details-value">+${student.parentPhone}</span></div>
+        </div>
+        <div style="margin-top: 15px; text-align:right;">
+          <a href="https://wa.me/${student.parentPhone}" target="_blank" class="btn btn-success"><i class="fab fa-whatsapp"></i> Chat WhatsApp</a>
+        </div>
+      </div>
+
+      <div id="subtab-catatan" class="tab-content-panel">
+        <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: var(--primary);">Catatan Khusus Wali Kelas:</h4>
+        <div class="card" style="padding: 12px; margin-bottom: 15px; font-size: 0.85rem; background-color: var(--bg-main);">
+          ${student.notes ? student.notes.replace(/\n/g, '<br>') : 'Tidak ada catatan khusus.'}
+        </div>
+        
+        <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: var(--primary);">Observasi Karakter Sikap:</h4>
+        <div class="details-list">
+          <div class="details-row"><span class="details-label">Spiritual · Ketaatan Beribadah</span><span class="details-value">${translateRating(char.spiritual.ibadah)}</span></div>
+          <div class="details-row"><span class="details-label">Spiritual · Perilaku Bersyukur</span><span class="details-value">${translateRating(char.spiritual.syukur)}</span></div>
+          <div class="details-row"><span class="details-label">Sosial · Kejujuran</span><span class="details-value">${translateRating(char.social.jujur)}</span></div>
+          <div class="details-row"><span class="details-label">Sosial · Kedisiplinan</span><span class="details-value">${translateRating(char.social.disiplin)}</span></div>
+          <div class="details-row"><span class="details-label">Sosial · Tanggung Jawab</span><span class="details-value">${translateRating(char.social.tanggungjawab)}</span></div>
+        </div>
+        ${(char.spiritual.catatan || char.social.catatan) ? `
+        <h4 style="font-size: 0.9rem; margin: 15px 0 8px; color: var(--primary);">Catatan Sikap:</h4>
+        <div class="card" style="padding: 12px; font-size: 0.85rem; background-color: var(--bg-main);">
+          ${char.spiritual.catatan ? `<p style="margin-bottom:6px;"><strong>Spiritual:</strong> ${char.spiritual.catatan}</p>` : ''}
+          ${char.social.catatan ? `<p><strong>Sosial:</strong> ${char.social.catatan}</p>` : ''}
+        </div>` : ''}
+      </div>
+
+      <div id="subtab-akademik" class="tab-content-panel">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom: 8px;">
+          <h4 style="font-size: 0.9rem; color: var(--primary); margin:0;">Rekap Nilai per Mata Pelajaran <span style="font-weight:400;font-size:0.75rem;color:var(--text-muted);">(KKM ${kkm})</span></h4>
+          <button type="button" id="clear-student-grades-btn" class="btn btn-outline" style="border:1px dashed var(--danger); color:var(--danger); background:none; padding:4px 10px; font-size:0.75rem;"><i class="fas fa-eraser"></i> Bersihkan Nilai</button>
+        </div>
+        <div class="details-list" style="margin-bottom: 8px;">
+          ${gradeRows || '<p class="text-muted" style="font-size:0.85rem;">Belum ada mata pelajaran.</p>'}
+          <div class="details-row" style="border-top: 2px solid var(--border-color);">
+            <span class="details-label" style="font-weight:700;">Rata-rata Keseluruhan</span>
+            <span class="details-value" style="font-weight:800;font-size:1.05rem;color:${overallAvg !== null && overallAvg < kkm ? 'var(--danger)' : 'var(--primary)'};">${overallAvg === null ? '-' : overallAvg}</span>
+          </div>
+        </div>
+
+        <h4 style="font-size: 0.9rem; margin: 15px 0 8px; color: var(--primary);">Kehadiran Semester Ini:</h4>
+        <div class="attendance-summary-box" style="margin-bottom: 15px;">
+          <div class="att-box h"><div class="att-box-val">${att.hadir}</div><div class="att-box-lbl">Hadir</div></div>
+          <div class="att-box s"><div class="att-box-val">${att.sakit}</div><div class="att-box-lbl">Sakit</div></div>
+          <div class="att-box i"><div class="att-box-val">${att.izin}</div><div class="att-box-lbl">Izin</div></div>
+          <div class="att-box a"><div class="att-box-val">${att.alfa}</div><div class="att-box-lbl">Alfa</div></div>
+        </div>
+        <p class="text-muted" style="font-size:0.8rem;margin-bottom:15px;">Persentase kehadiran: <strong style="color:var(--info);">${att.percentage}%</strong> dari ${att.total} hari tercatat.</p>
+
+        <h4 style="font-size: 0.9rem; margin-bottom: 8px; color: var(--primary);">Tabungan:</h4>
+        <div class="details-list">
+          <div class="details-row">
+            <span class="details-label" style="font-weight:600;">Saldo Saat Ini</span>
+            <span class="details-value" style="font-weight: 700; color: var(--success);">${formatRupiah(sav.balance)}</span>
+          </div>
+          ${savHistory}
+        </div>
+      </div>
+    `;
+
+    // Setup subtabs toggle
+    const subtabs = detailsContainer.querySelectorAll('.tab-btn.subtab');
+    subtabs.forEach(tab => {
+      tab.onclick = () => {
+        subtabs.forEach(t => t.classList.remove('active'));
+        detailsContainer.querySelectorAll('.tab-content-panel').forEach(p => p.classList.remove('active'));
+        
+        tab.classList.add('active');
+        document.getElementById(tab.getAttribute('data-subtab')).classList.add('active');
+      };
+    });
+
+    // Delete Student binding inside details modal footer
+    document.getElementById('delete-student-btn').onclick = () => {
+      confirmAction({
+        title: 'Hapus Murid',
+        message: `Hapus data siswa <strong>${student.name}</strong> secara permanen?`,
+        summaryHtml: studentImpactSummary(studentId),
+        confirmLabel: 'Hapus Permanen',
+        onConfirm: () => {
+          store.deleteStudent(studentId);
+          selectedStudentIds.delete(studentId);
+          closeModal('modal-student-detail');
+          alert(`Murid "${student.name}" berhasil dihapus!`);
+          renderStudents();
+          renderDashboard();
+          renderGradesRecap();
+        }
+      });
+    };
+
+    // Clear-grades binding inside the Akademik tab
+    const clearGradesBtn = document.getElementById('clear-student-grades-btn');
+    if (clearGradesBtn) {
+      clearGradesBtn.onclick = () => {
+        confirmAction({
+          title: 'Bersihkan Nilai Murid',
+          message: `Kosongkan <strong>seluruh nilai</strong> milik <strong>${student.name}</strong>? Profil, presensi, dan tabungan tidak terpengaruh.`,
+          confirmLabel: 'Bersihkan Nilai',
+          onConfirm: () => {
+            store.clearStudentGrades(studentId);
+            alert('Nilai murid berhasil dikosongkan!');
+            showStudentDetails(studentId);
+            renderStudents();
+            renderGradesRecap();
+            renderGradeGrid();
+          }
+        });
+      };
+    }
+
+    // Print profile binding
+    const printBtn = document.getElementById('print-student-btn');
+    if (printBtn) printBtn.onclick = () => printStudentProfile(studentId);
+
+    openModal('modal-student-detail');
+  }
+
+  // Build a clean, printable buku induk profile and open the print dialog.
+  function printStudentProfile(studentId) {
+    const student = store.getStudent(studentId);
+    if (!student) return;
+
+    const att = store.getStudentAttendanceSummary(studentId);
+    const sav = store.getSavings(studentId);
+    const char = store.getCharacter(studentId);
+    const subjects = store.getSubjects();
+    const kkm = store.getKkm();
+    const overallAvg = store.getStudentOverallAverage(studentId);
+    const s = store.state.settings;
+
+    const gradeRowsHtml = subjects.map(subj => {
+      const avg = store.getSubjectAverage(studentId, subj.id);
+      return `<tr><td>${subj.name}</td><td style="text-align:center;">${avg === null ? '-' : avg}</td><td style="text-align:center;">${avg === null ? '-' : (avg < kkm ? 'Belum Tuntas' : 'Tuntas')}</td></tr>`;
+    }).join('');
+
+    const row = (label, value) => `<tr><td style="width:38%;color:#555;">${label}</td><td><strong>${value || '-'}</strong></td></tr>`;
+
+    const html = `<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><title>Buku Induk - ${student.name}</title>
+      <style>
+        body{font-family:'Segoe UI',Arial,sans-serif;color:#222;padding:30px;max-width:800px;margin:auto;}
+        h1{font-size:18px;margin:0;} h2{font-size:13px;font-weight:400;color:#555;margin:2px 0 18px;}
+        h3{font-size:13px;margin:18px 0 6px;border-bottom:2px solid #0f766e;padding-bottom:4px;color:#0f766e;}
+        table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;}
+        td,th{border:1px solid #ddd;padding:6px 8px;text-align:left;}
+        th{background:#f1f5f9;}
+        .head{text-align:center;border-bottom:3px double #0f766e;padding-bottom:10px;margin-bottom:16px;}
+        @media print{button{display:none;}}
+      </style></head><body>
+      <div class="head"><h1>${s.schoolName || ''}</h1><h2>Buku Induk Murid · ${s.className || ''} · TP ${s.academicYear || ''}</h2></div>
+      <h3>Data Pribadi</h3>
+      <table>
+        ${row('Nama Lengkap', student.name)}
+        ${row('NIS / NISN', `${student.nis || '-'} / ${student.nisn || '-'}`)}
+        ${row('Jenis Kelamin', student.gender === 'L' ? 'Laki-laki' : 'Perempuan')}
+        ${row('Tempat, Tanggal Lahir', `${student.pob || '-'}, ${formatDate(student.dob)}`)}
+        ${row('Agama', student.religion)}
+        ${row('Alamat', student.address)}
+      </table>
+      <h3>Data Orang Tua / Wali</h3>
+      <table>
+        ${row('Nama Orang Tua', student.parentName)}
+        ${row('Pekerjaan', student.parentJob)}
+        ${row('Alamat Wali', student.parentAddress || student.address)}
+        ${row('No. WhatsApp', '+' + student.parentPhone)}
+      </table>
+      <h3>Rekap Nilai (KKM ${kkm})</h3>
+      <table><thead><tr><th>Mata Pelajaran</th><th style="text-align:center;width:20%;">Nilai</th><th style="text-align:center;width:25%;">Keterangan</th></tr></thead>
+      <tbody>${gradeRowsHtml}<tr><td><strong>Rata-rata Keseluruhan</strong></td><td style="text-align:center;"><strong>${overallAvg === null ? '-' : overallAvg}</strong></td><td></td></tr></tbody></table>
+      <h3>Kehadiran & Karakter</h3>
+      <table>
+        ${row('Kehadiran', `Hadir ${att.hadir} · Sakit ${att.sakit} · Izin ${att.izin} · Alfa ${att.alfa} (${att.percentage}%)`)}
+        ${row('Sikap Spiritual', `Ibadah: ${translateRating(char.spiritual.ibadah)}, Syukur: ${translateRating(char.spiritual.syukur)}`)}
+        ${row('Sikap Sosial', `Jujur: ${translateRating(char.social.jujur)}, Disiplin: ${translateRating(char.social.disiplin)}, Tanggung Jawab: ${translateRating(char.social.tanggungjawab)}`)}
+        ${row('Saldo Tabungan', formatRupiah(sav.balance))}
+        ${student.notes ? row('Catatan Khusus', student.notes) : ''}
+      </table>
+      <p style="font-size:11px;color:#888;margin-top:20px;">Dicetak pada ${formatDate(new Date().toISOString().split('T')[0])} via WaliKelas Digital.</p>
+      <script>window.onload=function(){window.print();}<\/script>
+      </body></html>`;
+
+    const w = window.open('', '_blank');
+    if (!w) {
+      alert('Mohon izinkan pop-up untuk mencetak profil.');
+      return;
+    }
+    w.document.write(html);
+    w.document.close();
+  }
+
+  function showEditStudentForm(studentId) {
+    const student = store.getStudent(studentId);
+    if (!student) return;
+
+    document.getElementById('student-form-title').innerText = 'Edit Data Murid';
+    
+    // Fill form fields
+    document.getElementById('student-id').value = student.id;
+    document.getElementById('student-name').value = student.name;
+    document.getElementById('student-nis').value = student.nis;
+    document.getElementById('student-nisn').value = student.nisn;
+    document.getElementById('student-gender').value = student.gender;
+    document.getElementById('student-religion').value = student.religion;
+    document.getElementById('student-pob').value = student.pob;
+    document.getElementById('student-dob').value = student.dob;
+    document.getElementById('student-address').value = student.address;
+    document.getElementById('student-parent-name').value = student.parentName;
+    document.getElementById('student-parent-job').value = student.parentJob || '';
+    document.getElementById('student-parent-phone').value = student.parentPhone;
+    document.getElementById('student-parent-address').value = student.parentAddress || '';
+    document.getElementById('student-notes').value = student.notes || '';
+
+    const accordion = document.querySelector('.form-accordion');
+    if (accordion) accordion.open = true;
+
+    openModal('modal-student-form');
+  }
+
+  // --- RENDER PAGE: PRESENSI (ATTENDANCE) ---
+  function renderAttendance() {
+    // Set date input value
+    document.getElementById('attendance-date').value = attendanceSelectedDate;
+    
+    const students = store.state.students;
+    const attList = document.getElementById('attendance-student-list');
+    attList.innerHTML = '';
+
+    if (students.length === 0) {
+      attList.innerHTML = '<div class="text-center py-5 text-muted">Belum ada data siswa. Daftarkan siswa terlebih dahulu di tab Siswa.</div>';
+      return;
+    }
+
+    const currentLogs = store.getAttendance(attendanceSelectedDate);
+
+    students.forEach(student => {
+      const activeStatus = currentLogs[student.id] || ''; // 'H', 'S', 'I', 'A'
+      
+      const div = document.createElement('div');
+      div.className = 'attendance-list-item';
+      div.innerHTML = `
+        <div class="attendance-student-details">
+          <div class="attendance-student-avatar ${student.gender === 'P' ? 'female' : ''}">
+            ${student.name.charAt(0)}
+          </div>
+          <div>
+            <div class="attendance-student-name">${student.name}</div>
+            <div class="attendance-student-nis">NIS: ${student.nis}</div>
+          </div>
+        </div>
+        <div class="attendance-button-group" data-student="${student.id}">
+          <button class="attendance-btn h ${activeStatus === 'H' ? 'active' : ''}" data-status="H">H</button>
+          <button class="attendance-btn s ${activeStatus === 'S' ? 'active' : ''}" data-status="S">S</button>
+          <button class="attendance-btn i ${activeStatus === 'I' ? 'active' : ''}" data-status="I">I</button>
+          <button class="attendance-btn a ${activeStatus === 'A' ? 'active' : ''}" data-status="A">A</button>
+        </div>
+      `;
+
+      // Button Click Handler
+      const buttons = div.querySelectorAll('.attendance-btn');
+      buttons.forEach(btn => {
+        btn.onclick = () => {
+          const status = btn.getAttribute('data-status');
+          const isAlreadyActive = btn.classList.contains('active');
+          
+          // Clear active states in this group
+          buttons.forEach(b => b.classList.remove('active'));
+          
+          const attendanceMap = store.getAttendance(attendanceSelectedDate);
+          
+          if (isAlreadyActive) {
+            // Uncheck status
+            delete attendanceMap[student.id];
+          } else {
+            // Check status
+            btn.classList.add('active');
+            attendanceMap[student.id] = status;
+          }
+
+          store.saveAttendance(attendanceSelectedDate, attendanceMap);
+          // Render recap automatically in background
+          renderAttendanceRecap();
+        };
+      });
+
+      attList.appendChild(div);
+    });
+
+    renderAttendanceRecap();
+  }
+
+  function renderAttendanceRecap() {
+    const recapBody = document.getElementById('attendance-recap-table-body');
+    recapBody.innerHTML = '';
+
+    const students = store.state.students;
+    if (students.length === 0) return;
+
+    students.forEach((student, index) => {
+      const summary = store.getStudentAttendanceSummary(student.id);
+      
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${index + 1}</td>
+        <td><strong>${student.name}</strong></td>
+        <td class="text-center">${summary.hadir}</td>
+        <td class="text-center">${summary.sakit}</td>
+        <td class="text-center">${summary.izin}</td>
+        <td class="text-center">${summary.alfa}</td>
+        <td class="text-center"><strong>${summary.percentage}%</strong></td>
+      `;
+      recapBody.appendChild(tr);
+    });
+  }
+
+  // --- RENDER PAGE: GRADES (NILAI) ---
+  function renderGrades() {
+    // Fill select box in grading forms
+    const gradeStudentSelect = document.getElementById('grade-student-select');
+    const charStudentSelect = document.getElementById('character-student-select');
+    
+    gradeStudentSelect.innerHTML = '<option value="">-- Pilih Murid --</option>';
+    charStudentSelect.innerHTML = '<option value="">-- Pilih Murid --</option>';
+    
+    store.state.students.forEach(student => {
+      const opt1 = document.createElement('option');
+      opt1.value = student.id;
+      opt1.innerText = `${student.name} (${student.nis})`;
+      gradeStudentSelect.appendChild(opt1);
+
+      const opt2 = document.createElement('option');
+      opt2.value = student.id;
+      opt2.innerText = `${student.name} (${student.nis})`;
+      charStudentSelect.appendChild(opt2);
+    });
+
+    // Curriculum label on the recap card.
+    const isMerdeka = store.state.settings.curriculum === 'merdeka';
+    const curriculumLabel = document.getElementById('academic-curriculum-label');
+    if (curriculumLabel) {
+      const kkm = store.getKkm();
+      curriculumLabel.innerText = `${isMerdeka ? 'Kurikulum Merdeka' : 'Kurikulum 2013 (K13)'} · KKM/KKTP: ${kkm}`;
+    }
+
+    // Keep subject dropdowns in sync every time the grades page opens.
+    populateSubjectDropdowns();
+    renderGradeGrid();
+    renderGradesRecap();
+  }
+
+  function renderGradesRecap() {
+    const tableHeaderRow = document.getElementById('grades-recap-header-row');
+    const tableBody = document.getElementById('grades-recap-table-body');
+
+    const kkm = store.getKkm();
+    const lessonsList = store.getSubjects();
+    const lessons = lessonsList.map(s => s.id);
+
+    // Render Headers — always uses the subject's saved name (single source).
+    tableHeaderRow.innerHTML = `
+      <th>No</th>
+      <th>Nama Murid</th>
+    `;
+    lessons.forEach(l => {
+      tableHeaderRow.innerHTML += `<th class="text-center">${store.getSubjectLabel(l)}</th>`;
+    });
+    tableHeaderRow.innerHTML += `<th class="text-center" style="background-color: var(--primary-light); color: var(--primary);">Rata-rata</th>`;
+
+    // Render Student Grades Row
+    tableBody.innerHTML = '';
+    const students = store.state.students;
+
+    if (students.length === 0) {
+      tableBody.innerHTML = `<tr><td colspan="${lessons.length + 3}" class="text-center text-muted py-4">Belum ada data murid.</td></tr>`;
+      return;
+    }
+
+    const cellColor = (val) => (val !== null && val < kkm) ? ' color: var(--danger);' : '';
+
+    students.forEach((student, index) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${index + 1}</td>
+        <td><strong>${student.name}</strong></td>
+      `;
+
+      lessons.forEach(subject => {
+        const avg = store.getSubjectAverage(student.id, subject);
+        tr.innerHTML += `<td class="text-center" style="font-weight:600;${cellColor(avg)}">${avg === null ? '-' : avg}</td>`;
+      });
+
+      const overallAvg = store.getStudentOverallAverage(student.id);
+      tr.innerHTML += `<td class="text-center" style="font-weight: 700; background-color: rgba(15, 118, 110, 0.05);${cellColor(overallAvg)}">${overallAvg === null ? '-' : overallAvg}</td>`;
+      tableBody.appendChild(tr);
+    });
+  }
+
+  // Handle student select change in grading form
+  document.getElementById('grade-student-select').onchange = (e) => {
+    const studentId = e.target.value;
+    const subject = document.getElementById('grade-subject-select').value;
+    loadStudentGradesToForm(studentId, subject);
+  };
+
+  document.getElementById('grade-subject-select').onchange = (e) => {
+    if (e.target.value === 'add_new_subject') {
+      handleAddNewSubject(e.target);
+    } else {
+      const studentId = document.getElementById('grade-student-select').value;
+      const subject = e.target.value;
+      loadStudentGradesToForm(studentId, subject);
+    }
+  };
+
+  function loadStudentGradesToForm(studentId, subject) {
+    renderDynamicAssessments('main-grade-inputs-container', subject, studentId, 'grade');
+    return;
+  }
+
+  function renderDynamicAssessments(containerId, subjectId, studentId, prefix) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    if (!subjectId) {
+      container.innerHTML = `<div class="text-muted text-center" style="grid-column: 1/-1; padding: 10px;">Pilih mata pelajaran untuk memuat komponen nilai.</div>`;
+      return;
+    }
+
+    const assessments = store.getSubjectAssessments(subjectId);
+    const scores = studentId ? (store.getGrades(studentId)[subjectId] || {}) : {};
+    const defaultIds = ['tugas1', 'ulangan1', 'pts', 'pas'];
+
+    container.innerHTML = assessments.map(a => {
+      const value = scores[a.id] !== undefined ? scores[a.id] : '';
+      const isDefault = defaultIds.includes(a.id);
+
+      return `
+        <div class="input-group" style="position: relative; margin-bottom: 5px;">
+          <label style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 0.85rem; font-weight: 600; text-transform: uppercase;">${a.name} <span style="font-weight:400;font-size:0.7rem;color:var(--text-muted);text-transform:none;">(${categoryName(a.category)})</span></span>
+            ${isDefault ? '' : `
+              <button type="button" class="btn-delete-assessment" data-subject-id="${subjectId}" data-assessment-id="${a.id}" style="background: none; border: none; color: var(--danger); cursor: pointer; font-size: 0.75rem; padding: 0;" title="Hapus Komponen">
+                <i class="fas fa-times-circle"></i> Hapus
+              </button>
+            `}
+          </label>
+          <input type="number" id="${prefix}-${a.id}" min="0" max="100" placeholder="-" class="grade-input-box" value="${value}" style="width: 100%; text-align: left; padding-left: 12px;">
+        </div>
+      `;
+    }).join('');
+
+    // Bind delete events
+    container.querySelectorAll('.btn-delete-assessment').forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const subId = btn.getAttribute('data-subject-id');
+        const assId = btn.getAttribute('data-assessment-id');
+        confirmAction({
+          title: 'Hapus Komponen Nilai',
+          message: 'Hapus komponen nilai ini? Seluruh nilai terkait komponen ini pada semua murid akan terhapus permanen.',
+          confirmLabel: 'Hapus Komponen',
+          onConfirm: () => {
+            const res = store.deleteSubjectAssessment(subId, assId);
+            if (res.success) {
+              alert(`Komponen "${res.name}" berhasil dihapus!`);
+              renderDynamicAssessments(containerId, subjectId, studentId, prefix);
+              renderGradeGrid();
+              renderGradesRecap();
+            } else {
+              alert(`Gagal menghapus: ${res.error}`);
+            }
+          }
+        });
+      };
+    });
+  }
+
+  // Handle Character Student Selection change
+  document.getElementById('character-student-select').onchange = (e) => {
+    const studentId = e.target.value;
+    if (!studentId) {
+      document.getElementById('char-spiritual-ibadah').value = 'B';
+      document.getElementById('char-spiritual-syukur').value = 'B';
+      document.getElementById('char-spiritual-notes').value = '';
+      document.getElementById('char-social-jujur').value = 'B';
+      document.getElementById('char-social-disiplin').value = 'B';
+      document.getElementById('char-social-tanggungjawab').value = 'B';
+      document.getElementById('char-social-notes').value = '';
+      return;
+    }
+
+    const char = store.getCharacter(studentId);
+    document.getElementById('char-spiritual-ibadah').value = char.spiritual.ibadah || 'B';
+    document.getElementById('char-spiritual-syukur').value = char.spiritual.syukur || 'B';
+    document.getElementById('char-spiritual-notes').value = char.spiritual.catatan || '';
+    document.getElementById('char-social-jujur').value = char.social.jujur || 'B';
+    document.getElementById('char-social-disiplin').value = char.social.disiplin || 'B';
+    document.getElementById('char-social-tanggungjawab').value = char.social.tanggungjawab || 'B';
+    document.getElementById('char-social-notes').value = char.social.catatan || '';
+  };
+
+  // --- RENDER PAGE: FINANCE (KEUANGAN) ---
+  function renderFinance() {
+    // Fill Student select box in savings deposit form
+    const savingStudentSelect = document.getElementById('saving-student-select');
+    savingStudentSelect.innerHTML = '<option value="">-- Pilih Murid --</option>';
+    
+    store.state.students.forEach(student => {
+      const opt = document.createElement('option');
+      opt.value = student.id;
+      opt.innerText = `${student.name} (Saldo: ${formatRupiah(store.getSavings(student.id).balance)})`;
+      savingStudentSelect.appendChild(opt);
+    });
+
+    // Populate Cash book stats
+    document.getElementById('cash-balance-total').innerText = formatRupiah(store.state.classCash.balance);
+
+    // Render Cash transaction history
+    renderCashHistory();
+
+    // Render Savings Recap Table
+    renderSavingsRecap();
+  }
+
+  function renderCashHistory() {
+    const historyBody = document.getElementById('cash-history-table-body');
+    historyBody.innerHTML = '';
+
+    const list = store.state.classCash.history;
+    if (list.length === 0) {
+      historyBody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">Belum ada transaksi uang kas kelas.</td></tr>`;
+      return;
+    }
+
+    list.forEach(tx => {
+      const tr = document.createElement('tr');
+      
+      const typeBadge = tx.type === 'in'
+        ? `<span class="btn-success" style="padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Masuk</span>`
+        : `<span class="btn-danger" style="padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Keluar</span>`;
+      
+      const colorStyle = tx.type === 'in' ? 'color: var(--success); font-weight: 600;' : 'color: var(--danger); font-weight: 600;';
+      const prefix = tx.type === 'in' ? '+' : '-';
+
+      tr.innerHTML = `
+        <td>${formatDate(tx.date)}</td>
+        <td>${typeBadge}</td>
+        <td>${tx.note}</td>
+        <td style="${colorStyle}">${prefix}${formatRupiah(tx.amount)}</td>
+        <td>
+          <button class="btn btn-secondary delete-cash-tx" data-id="${tx.id}" style="padding: 4px 8px;"><i class="fas fa-trash"></i></button>
+        </td>
+      `;
+
+      tr.querySelector('.delete-cash-tx').onclick = () => {
+        if (confirm('Hapus transaksi kas ini? Saldo kas kelas akan diperbarui kembali.')) {
+          store.deleteClassCashTransaction(tx.id);
+          renderFinance();
+          renderDashboard();
+        }
+      };
+
+      historyBody.appendChild(tr);
+    });
+  }
+
+  function renderSavingsRecap() {
+    const savingsBody = document.getElementById('savings-recap-table-body');
+    savingsBody.innerHTML = '';
+
+    const students = store.state.students;
+    if (students.length === 0) {
+      savingsBody.innerHTML = `<tr><td colspan="4" class="text-center text-muted py-4">Belum ada data murid.</td></tr>`;
+      return;
+    }
+
+    students.forEach((student, index) => {
+      const sav = store.getSavings(student.id);
+      
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${index + 1}</td>
+        <td><strong>${student.name}</strong></td>
+        <td>${formatRupiah(sav.balance)}</td>
+        <td>
+          <button class="btn btn-primary view-savings-tx" data-id="${student.id}" style="padding: 4px 8px;"><i class="fas fa-history"></i> Riwayat</button>
+        </td>
+      `;
+
+      tr.querySelector('.view-savings-tx').onclick = () => {
+        financeSelectedStudentId = student.id;
+        showStudentSavingsHistory(student.id);
+      };
+
+      savingsBody.appendChild(tr);
+    });
+  }
+
+  function showStudentSavingsHistory(studentId) {
+    const student = store.getStudent(studentId);
+    const sav = store.getSavings(studentId);
+    if (!student) return;
+
+    document.getElementById('savings-history-title').innerText = `Riwayat Tabungan: ${student.name}`;
+    
+    const body = document.getElementById('savings-history-modal-body');
+    body.innerHTML = '';
+
+    if (sav.history.length === 0) {
+      body.innerHTML = '<p class="text-muted text-center py-4">Belum ada transaksi tabungan untuk siswa ini.</p>';
+    } else {
+      const table = document.createElement('table');
+      table.className = 'table-custom';
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>Tanggal</th>
+            <th>Tipe</th>
+            <th>Jumlah</th>
+            <th>Keterangan</th>
+          </tr>
+        </thead>
+        <tbody>
+        </tbody>
+      `;
+
+      const tbody = table.querySelector('tbody');
+      sav.history.forEach(tx => {
+        const typeLabel = tx.type === 'deposit' ? 'Setor' : 'Tarik';
+        const typeClass = tx.type === 'deposit' ? 'btn-success' : 'btn-danger';
+        const colorStyle = tx.type === 'deposit' ? 'color: var(--success); font-weight: 600;' : 'color: var(--danger); font-weight: 600;';
+        const prefix = tx.type === 'deposit' ? '+' : '-';
+        
+        tbody.innerHTML += `
+          <tr>
+            <td>${formatDate(tx.date)}</td>
+            <td><span class="${typeClass}" style="padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">${typeLabel}</span></td>
+            <td style="${colorStyle}">${prefix}${formatRupiah(tx.amount)}</td>
+            <td style="font-size: 0.8rem;">${tx.note}</td>
+          </tr>
+        `;
+      });
+
+      body.appendChild(table);
+    }
+
+    openModal('modal-savings-history');
+  }
+
+  // --- RENDER PAGE: SCHEDULE & CALENDAR (AGENDA) ---
+  function renderSchedule() {
+    const days = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+    
+    // Render lessons
+    days.forEach(day => {
+      const container = document.getElementById(`lessons-${day}`);
+      if (!container) return;
+      container.innerHTML = '';
+
+      const list = store.state.schedule.lessons[day] || [];
+      if (list.length === 0) {
+        container.innerHTML = '<div class="text-muted text-center py-2" style="font-size:0.8rem;">Tidak ada jadwal</div>';
+      } else {
+        list.forEach((lesson, index) => {
+          const div = document.createElement('div');
+          div.className = 'lesson-item';
+          div.innerHTML = `
+            <div class="lesson-time">${lesson.time}</div>
+            <div class="lesson-subject">${lesson.subject}</div>
+            <div class="lesson-teacher">${lesson.teacher}</div>
+            <button class="lesson-delete-btn" data-day="${day}" data-idx="${index}">
+              <i class="fas fa-trash-alt"></i>
+            </button>
+          `;
+
+          div.querySelector('.lesson-delete-btn').onclick = (e) => {
+            e.stopPropagation();
+            if (confirm(`Hapus jadwal ${lesson.subject} di hari ${day}?`)) {
+              store.deleteLesson(day, index);
+              renderSchedule();
+            }
+          };
+
+          container.appendChild(div);
+        });
+      }
+
+      // Render Piket Group
+      const piketList = document.getElementById(`piket-${day}-list`);
+      if (piketList) {
+        piketList.innerHTML = '';
+        const members = store.state.schedule.piket[day] || [];
+        if (members.length === 0) {
+          piketList.innerHTML = '<span class="text-muted" style="font-size: 0.8rem;">Belum ada jadwal piket</span>';
+        } else {
+          members.forEach(m => {
+            const span = document.createElement('span');
+            span.className = 'piket-member-tag';
+            span.innerText = m;
+            piketList.appendChild(span);
+          });
+        }
+      }
+    });
+
+    // Populate Piket editor form names
+    const piketSelectContainer = document.getElementById('piket-students-checkboxes');
+    if (piketSelectContainer) {
+      piketSelectContainer.innerHTML = '';
+      store.state.students.forEach(student => {
+        piketSelectContainer.innerHTML += `
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+            <input type="checkbox" name="piket-student" value="${student.name}" id="chk-piket-${student.id}">
+            <label for="chk-piket-${student.id}" style="font-size: 0.9rem;">${student.name}</label>
+          </div>
+        `;
+      });
+    }
+
+    // Render Calendar
+    renderCalendar();
+  }
+
+  function renderCalendar() {
+    const listBody = document.getElementById('calendar-events-list');
+    listBody.innerHTML = '';
+
+    const events = store.state.schedule.calendar;
+    if (events.length === 0) {
+      listBody.innerHTML = '<div class="text-muted text-center py-4">Belum ada agenda sekolah terdaftar.</div>';
+      return;
+    }
+
+    events.forEach(evt => {
+      const row = document.createElement('div');
+      row.className = 'feed-item';
+      
+      let typeClass = 'info';
+      let typeLabel = 'Kegiatan';
+      
+      if (evt.type === 'holiday') {
+        typeClass = 'danger';
+        typeLabel = 'Libur';
+      } else if (evt.type === 'exam') {
+        typeClass = 'warning';
+        typeLabel = 'Ujian';
+      }
+
+      row.classList.add(typeClass);
+      row.style.justifyContent = 'space-between';
+      row.style.alignItems = 'center';
+      
+      row.innerHTML = `
+        <div class="feed-content">
+          <span class="btn-secondary" style="padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${typeLabel}</span>
+          <h4 style="margin-top: 4px;">${evt.title}</h4>
+          <p>${formatDate(evt.date)}</p>
+        </div>
+        <div>
+          <button class="btn btn-secondary delete-event-btn" data-id="${evt.id}" style="padding: 6px 10px;"><i class="fas fa-trash"></i></button>
+        </div>
+      `;
+
+      row.querySelector('.delete-event-btn').onclick = () => {
+        if (confirm(`Hapus agenda "${evt.title}"?`)) {
+          store.deleteCalendarEvent(evt.id);
+          renderCalendar();
+          renderDashboard();
+        }
+      };
+
+      listBody.appendChild(row);
+    });
+  }
+
+  // --- RENDER PAGE: COMMUNICATION (BUKU PENGHUBUNG) ---
+  function renderCommunication() {
+    // Fill Announcement Student select box (for Broadcast options)
+    const commStudentSelect = document.getElementById('comm-student-select');
+    commStudentSelect.innerHTML = '<option value="">-- Pilih Murid --</option>';
+    store.state.students.forEach(student => {
+      const opt = document.createElement('option');
+      opt.value = student.id;
+      opt.innerText = student.name;
+      commStudentSelect.appendChild(opt);
+    });
+
+    // Render Announcement cards
+    renderAnnouncementsList();
+
+    // Render Gallery
+    renderGalleryList();
+  }
+
+  function renderAnnouncementsList() {
+    const container = document.getElementById('announcements-list-container');
+    container.innerHTML = '';
+
+    const list = store.state.announcements;
+    if (list.length === 0) {
+      container.innerHTML = '<div class="text-center py-4 text-muted card">Belum ada pengumuman kelas dibuat.</div>';
+      return;
+    }
+
+    list.forEach(ann => {
+      const card = document.createElement('div');
+      card.className = 'announcement-card';
+      card.innerHTML = `
+        <div class="announcement-header">
+          <h3 class="announcement-title">${ann.title}</h3>
+          <span class="announcement-date"><i class="far fa-calendar-alt"></i> ${formatDate(ann.date)}</span>
+        </div>
+        <p class="announcement-content">${ann.content.replace(/\n/g, '<br>')}</p>
+        <div class="announcement-actions">
+          <button class="btn btn-success share-wa-ann-btn" data-id="${ann.id}"><i class="fab fa-whatsapp"></i> Bagikan ke Grup</button>
+          <button class="btn btn-secondary delete-ann-btn" data-id="${ann.id}"><i class="fas fa-trash"></i> Hapus</button>
+        </div>
+      `;
+
+      // Share to WA
+      card.querySelector('.share-wa-ann-btn').onclick = () => {
+        const text = `📢 *PENGUMUMAN WALI KELAS (${store.state.settings.className})*\n\n*${ann.title.toUpperCase()}*\n\n${ann.content}\n\nSalam Hangat,\nWali Kelas\n_${store.state.settings.schoolName}_`;
+        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+      };
+
+      // Delete
+      card.querySelector('.delete-ann-btn').onclick = () => {
+        if (confirm(`Hapus pengumuman "${ann.title}"?`)) {
+          store.deleteAnnouncement(ann.id);
+          renderAnnouncementsList();
+          renderDashboard();
+        }
+      };
+
+      container.appendChild(card);
+    });
+  }
+
+  function renderGalleryList() {
+    const container = document.getElementById('gallery-list-container');
+    container.innerHTML = '';
+
+    // Static simulations of photos for demo purposes
+    const mockPhotos = [
+      { id: 'gal_1', title: 'Belajar Kelompok IPA', date: '2026-06-22', type: 'color1', tag: 'Pelajaran' },
+      { id: 'gal_2', title: 'Kebersihan Kelas Jumsih', date: '2026-06-19', type: 'color2', tag: 'Piket' },
+      { id: 'gal_3', title: 'Latihan Pramuka Siaga', date: '2026-06-12', type: 'color3', tag: 'Eskul' },
+      { id: 'gal_4', title: 'Juara Kelas Lomba Mewarnai', date: '2026-06-05', type: 'color4', tag: 'Prestasi' }
+    ];
+
+    mockPhotos.forEach(p => {
+      const card = document.createElement('div');
+      card.className = `gallery-card ${p.type}`;
+      card.innerHTML = `
+        <div class="gallery-img-placeholder">
+          <i class="fas fa-camera"></i>
+        </div>
+        <div class="gallery-info">
+          <span class="gallery-tag">${p.tag}</span>
+          <div class="gallery-title">${p.title}</div>
+          <div class="gallery-date">${formatDate(p.date)}</div>
+        </div>
+      `;
+      container.appendChild(card);
+    });
+  }
+
+  // Handle Broadcast Quick message selection
+  document.getElementById('comm-student-select').onchange = (e) => {
+    const studentId = e.target.value;
+    if (!studentId) {
+      document.getElementById('broadcast-text-template').value = '';
+      return;
+    }
+    updateBroadcastTemplate();
+  };
+
+  document.getElementById('broadcast-type-select').onchange = () => {
+    updateBroadcastTemplate();
+  };
+
+  function updateBroadcastTemplate() {
+    const studentId = document.getElementById('comm-student-select').value;
+    const type = document.getElementById('broadcast-type-select').value;
+    const textarea = document.getElementById('broadcast-text-template');
+    
+    if (!studentId) return;
+
+    const student = store.getStudent(studentId);
+    if (!student) return;
+
+    let text = '';
+    const className = store.state.settings.className;
+
+    switch (type) {
+      case 'general':
+        text = `Assalamu'alaikum wr. wb. Selamat pagi Bapak/Ibu dari ${student.name}. Saya Wali Kelas dari ${className} ingin menginformasikan mengenai perkembangan belajar anak di sekolah.`;
+        break;
+      case 'grades':
+        const grades = store.getGrades(studentId);
+        let gradesList = '';
+        Object.keys(grades).forEach(subj => {
+          const values = Object.values(grades[subj]);
+          const avg = values.length > 0 ? Math.round(values.reduce((a,b)=>a+b, 0)/values.length) : 0;
+          gradesList += `- ${subj.toUpperCase()}: ${avg}\n`;
+        });
+        
+        text = `📢 *LAPORAN NILAI RAPOR SEMENTARA*\n\nYth. Wali Murid dari *${student.name}*,\nBerikut adalah rekap nilai rata-rata sementara di ${className}:\n\n${gradesList || 'Belum ada nilai terinput.\n'}\nMohon bantuannya untuk terus mendampingi anak belajar di rumah.\nTerima kasih.`;
+        break;
+      case 'attendance':
+        const att = store.getStudentAttendanceSummary(studentId);
+        text = `📢 *REKAP KEHADIRAN SISWA*\n\nYth. Orang Tua dari *${student.name}*,\nBerikut adalah rekap kehadiran siswa pada semester ini di ${className}:\n- Hadir: ${att.hadir} hari\n- Sakit: ${att.sakit} hari\n- Izin: ${att.izin} hari\n- Alfa: ${att.alfa} hari\n- Persentase: *${att.percentage}%*\n\nMohon bantuannya agar anak dapat terus mempertahankan kedisiplinan bersekolah.\nTerima kasih.`;
+        break;
+      case 'warning':
+        text = `⚠️ *PERINGATAN KETIDAKHADIRAN / TUGAS*\n\nYth. Orang Tua dari *${student.name}*,\nSaya Wali Kelas ${className} ingin mengabarkan bahwa *${student.name}* hari ini tidak masuk sekolah tanpa keterangan / belum mengumpulkan tugas penting. Mohon hubungi saya segera untuk konfirmasi.\nTerima kasih.`;
+        break;
+    }
+
+    textarea.value = text;
+  }
+
+  // --- RENDER PAGE: SETTINGS (PENGATURAN) ---
+  function renderSettings() {
+    // Fill Settings fields
+    document.getElementById('settings-classname').value = store.state.settings.className;
+    document.getElementById('settings-schoolname').value = store.state.settings.schoolName;
+    document.getElementById('settings-curriculum').value = store.state.settings.curriculum;
+    document.getElementById('settings-year').value = store.state.settings.academicYear;
+    const kkmEl = document.getElementById('settings-kkm');
+    if (kkmEl) kkmEl.value = store.getKkm();
+    renderSettingsSubjectsList();
+  }
+
+  function renderSettingsSubjectsList() {
+    const listEl = document.getElementById('settings-subjects-list');
+    if (!listEl) return;
+
+    const subjects = store.state.settings.subjects || [];
+
+    listEl.innerHTML = subjects.map((s, i) => {
+      const compCount = store.getSubjectAssessments(s.id).length;
+      return `
+        <li style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background-color: var(--bg-main); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+          <div>
+            <span style="font-weight: 500; font-size: 0.9rem;">${s.name}</span>
+            <span style="font-size: 0.75rem; color: var(--text-muted); display:block;">${compCount} komponen nilai</span>
+          </div>
+          <div style="display: flex; gap: 4px; align-items: center;">
+            <button type="button" class="btn-move-subject" data-id="${s.id}" data-dir="up" ${i === 0 ? 'disabled' : ''} style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; ${i === 0 ? 'opacity:0.3;cursor:not-allowed;' : ''}" title="Naikkan urutan">
+              <i class="fas fa-chevron-up"></i>
+            </button>
+            <button type="button" class="btn-move-subject" data-id="${s.id}" data-dir="down" ${i === subjects.length - 1 ? 'disabled' : ''} style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; ${i === subjects.length - 1 ? 'opacity:0.3;cursor:not-allowed;' : ''}" title="Turunkan urutan">
+              <i class="fas fa-chevron-down"></i>
+            </button>
+            <button type="button" class="btn-edit-subject" data-id="${s.id}" style="background: none; border: none; color: var(--primary); cursor: pointer; padding: 4px;" title="Edit Nama Mata Pelajaran">
+              <i class="fas fa-edit"></i>
+            </button>
+            <button type="button" class="btn-clear-subject-grades" data-id="${s.id}" style="background: none; border: none; color: var(--warning, #d97706); cursor: pointer; padding: 4px;" title="Kosongkan Nilai Mapel Ini">
+              <i class="fas fa-eraser"></i>
+            </button>
+            <button type="button" class="btn-delete-subject" data-id="${s.id}" style="background: none; border: none; color: var(--danger); cursor: pointer; padding: 4px;" title="Hapus Mata Pelajaran">
+              <i class="fas fa-trash-alt"></i>
+            </button>
+          </div>
+        </li>
+      `;
+    }).join('');
+
+    // Bind reorder clicks
+    listEl.querySelectorAll('.btn-move-subject').forEach(btn => {
+      if (btn.hasAttribute('disabled')) return;
+      btn.onclick = () => {
+        const id = btn.getAttribute('data-id');
+        const dir = btn.getAttribute('data-dir');
+        const ids = subjects.map(s => s.id);
+        const idx = ids.indexOf(id);
+        const swapWith = dir === 'up' ? idx - 1 : idx + 1;
+        if (swapWith < 0 || swapWith >= ids.length) return;
+        [ids[idx], ids[swapWith]] = [ids[swapWith], ids[idx]];
+        store.reorderSubjects(ids);
+        populateSubjectDropdowns();
+        renderSettingsSubjectsList();
+        renderGradesRecap();
+      };
+    });
+
+    // Bind edit clicks → open styled modal
+    listEl.querySelectorAll('.btn-edit-subject').forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.getAttribute('data-id');
+        const subject = subjects.find(s => s.id === id);
+        if (!subject) return;
+        document.getElementById('edit-subject-id').value = id;
+        document.getElementById('edit-subject-name').value = subject.name;
+        const w = store.getCategoryWeights(id);
+        document.getElementById('edit-weight-tugas').value = w.tugas;
+        document.getElementById('edit-weight-uh').value = w.uh;
+        document.getElementById('edit-weight-uts').value = w.uts;
+        document.getElementById('edit-weight-uas').value = w.uas;
+        updateEditWeightTotal();
+        openModal('modal-edit-subject');
+      };
+    });
+
+    // Bind clear-grades (per subject) clicks
+    listEl.querySelectorAll('.btn-clear-subject-grades').forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.getAttribute('data-id');
+        const subject = subjects.find(s => s.id === id);
+        if (!subject) return;
+        confirmAction({
+          title: 'Kosongkan Nilai Mapel',
+          message: `Kosongkan <strong>seluruh nilai ${subject.name}</strong> untuk semua murid? Mata pelajaran tetap ada, hanya nilainya yang dihapus.`,
+          confirmLabel: 'Kosongkan Nilai',
+          onConfirm: () => {
+            const res = store.clearSubjectGrades(id);
+            alert(`Nilai ${subject.name} berhasil dikosongkan (${res.cleared} entri).`);
+            renderSettingsSubjectsList();
+            renderGradeGrid();
+            renderGradesRecap();
+            renderStudents();
+          }
+        });
+      };
+    });
+
+    // Bind delete clicks
+    listEl.querySelectorAll('.btn-delete-subject').forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.getAttribute('data-id');
+        const subject = subjects.find(s => s.id === id);
+        if (!subject) return;
+
+        confirmAction({
+          title: 'Hapus Mata Pelajaran',
+          message: `Hapus mata pelajaran <strong>${subject.name}</strong>? Seluruh nilai murid pada mapel ini akan ikut <strong>terhapus permanen</strong>.`,
+          confirmLabel: 'Hapus Mapel',
+          onConfirm: () => {
+            const res = store.deleteSubject(id);
+            if (res.success) {
+              alert(`Mata pelajaran "${res.name}" berhasil dihapus!`);
+              populateSubjectDropdowns();
+              renderSettingsSubjectsList();
+              renderGradeGrid();
+              renderGradesRecap();
+              renderStudents();
+            } else {
+              alert(`Gagal menghapus: ${res.error}`);
+            }
+          }
+        });
+      };
+    });
+  }
+
+  // --- REGISTRATION OF COMMON EVENT LISTENERS ---
+  function initEventListeners() {
+    // FORM: TAMBAH MATA PELAJARAN (MODAL)
+    const addSubjectForm = document.getElementById('add-subject-form');
+    if (addSubjectForm) {
+      addSubjectForm.onsubmit = (e) => {
+        e.preventDefault();
+        const nameInput = document.getElementById('new-subject-name');
+        const triggerInput = document.getElementById('add-subject-trigger-select');
+        const name = nameInput ? nameInput.value.trim() : '';
+        const triggerSelectId = triggerInput ? triggerInput.value : '';
+        const selectElement = document.getElementById(triggerSelectId);
+
+        if (!name) return;
+
+        const res = store.addSubject(name);
+        if (res.success) {
+          alert(`Mata pelajaran "${res.subject.name}" berhasil ditambahkan!`);
+          populateSubjectDropdowns();
+          closeModal('modal-add-subject');
+          
+          if (selectElement) {
+            selectElement.value = res.subject.id;
+            if (selectElement.id === 'quick-grade-subject') {
+              const studentId = document.getElementById('quick-grade-student-id').value;
+              loadQuickGradeSubjectData(studentId, res.subject.id);
+            } else if (selectElement.id === 'grade-subject-select') {
+              const studentId = document.getElementById('grade-student-select').value;
+              loadStudentGradesToForm(studentId, res.subject.id);
+              renderGradesRecap();
+            }
+          }
+        } else {
+          alert(`Gagal menambahkan mata pelajaran: ${res.error}`);
+          if (selectElement) selectElement.selectedIndex = 0;
+        }
+      };
+    }
+
+    // FORM: TAMBAH MATA PELAJARAN (SETTINGS TAB)
+    const settingsAddSubjForm = document.getElementById('settings-add-subject-form');
+    if (settingsAddSubjForm) {
+      settingsAddSubjForm.onsubmit = (e) => {
+        e.preventDefault();
+        const nameInput = document.getElementById('settings-new-subject-name');
+        const name = nameInput ? nameInput.value.trim() : '';
+
+        if (!name) return;
+
+        const res = store.addSubject(name);
+        if (res.success) {
+          alert(`Mata pelajaran "${res.subject.name}" berhasil ditambahkan!`);
+          nameInput.value = '';
+          populateSubjectDropdowns();
+          renderSettingsSubjectsList();
+        } else {
+          alert(`Gagal menambahkan mata pelajaran: ${res.error}`);
+        }
+      };
+    }
+
+    // FORM: EDIT MATA PELAJARAN (MODAL)
+    const editSubjectForm = document.getElementById('edit-subject-form');
+    if (editSubjectForm) {
+      editSubjectForm.onsubmit = (e) => {
+        e.preventDefault();
+        const id = document.getElementById('edit-subject-id').value;
+        const newName = document.getElementById('edit-subject-name').value.trim();
+        if (!id || !newName) return;
+        const res = store.updateSubject(id, newName);
+        if (!res.success) {
+          alert(`Gagal mengubah nama: ${res.error}`);
+          return;
+        }
+        // Save category weights too.
+        store.setCategoryWeights(id, {
+          tugas: document.getElementById('edit-weight-tugas').value,
+          uh: document.getElementById('edit-weight-uh').value,
+          uts: document.getElementById('edit-weight-uts').value,
+          uas: document.getElementById('edit-weight-uas').value
+        });
+        closeModal('modal-edit-subject');
+        populateSubjectDropdowns();
+        renderSettingsSubjectsList();
+        renderGradeGrid();
+        renderGradesRecap();
+        renderStudents();
+        window.showToast(`Mata pelajaran "${res.newName}" diperbarui.`, 'success');
+      };
+
+      // Live total indicator for the weight inputs.
+      document.querySelectorAll('.edit-weight-input').forEach(inp => {
+        inp.oninput = updateEditWeightTotal;
+      });
+    }
+
+    // FORM: TAMBAH KOMPONEN NILAI (kategori + bobot)
+    const assessmentCompForm = document.getElementById('assessment-component-form');
+    if (assessmentCompForm) {
+      assessmentCompForm.onsubmit = (e) => {
+        e.preventDefault();
+        const subjectId = document.getElementById('assessment-subject-id').value;
+        const name = document.getElementById('assessment-comp-name').value.trim();
+        const category = document.getElementById('assessment-comp-category').value;
+        if (!subjectId || !name) return;
+        const res = store.addSubjectAssessment(subjectId, name, category);
+        if (res.success) {
+          closeModal('modal-assessment-component');
+          if (typeof pendingAssessmentRerender === 'function') pendingAssessmentRerender();
+          renderGradesRecap();
+          renderSettingsSubjectsList();
+          window.showToast(`Komponen "${res.assessment.name}" ditambahkan.`, 'success');
+        } else {
+          alert(`Gagal menambahkan komponen: ${res.error}`);
+        }
+      };
+    }
+
+    // BUTTON: TAMBAH KOMPONEN NILAI (QUICK GRADE)
+    const btnAddQuickGradeComp = document.getElementById('btn-add-quick-grade-component');
+    if (btnAddQuickGradeComp) {
+      btnAddQuickGradeComp.onclick = () => {
+        const subjectId = document.getElementById('quick-grade-subject').value;
+        const studentId = document.getElementById('quick-grade-student-id').value;
+        if (!subjectId || subjectId === 'add_new_subject') {
+          alert('Silakan pilih mata pelajaran terlebih dahulu.');
+          return;
+        }
+        openAssessmentComponentModal(subjectId, () =>
+          renderDynamicAssessments('quick-grade-inputs-container', subjectId, studentId, 'quick-grade'));
+      };
+    }
+
+    // BUTTON: TAMBAH KOMPONEN NILAI (MAIN GRADE)
+    const btnAddMainGradeComp = document.getElementById('btn-add-main-grade-component');
+    if (btnAddMainGradeComp) {
+      btnAddMainGradeComp.onclick = () => {
+        const subjectId = document.getElementById('grade-subject-select').value;
+        const studentId = document.getElementById('grade-student-select').value;
+        if (!subjectId || subjectId === 'add_new_subject') {
+          alert('Silakan pilih mata pelajaran terlebih dahulu.');
+          return;
+        }
+        openAssessmentComponentModal(subjectId, () =>
+          renderDynamicAssessments('main-grade-inputs-container', subjectId, studentId, 'grade'));
+      };
+    }
+
+    // SEARCH BAR STUDENT
+    const searchStudentInput = document.getElementById('search-student');
+    if (searchStudentInput) {
+      searchStudentInput.oninput = () => renderStudents();
+    }
+
+    // BULK SELECTION: select-all toggles every currently visible (filtered) row
+    const selectAllCb = document.getElementById('students-select-all');
+    if (selectAllCb) {
+      selectAllCb.onchange = () => {
+        const searchVal = document.getElementById('search-student').value.toLowerCase();
+        const filtered = store.state.students.filter(s =>
+          s.name.toLowerCase().includes(searchVal) ||
+          (s.nis && s.nis.toLowerCase().includes(searchVal)) ||
+          (s.nisn && s.nisn.toLowerCase().includes(searchVal)));
+        if (selectAllCb.checked) filtered.forEach(s => selectedStudentIds.add(s.id));
+        else filtered.forEach(s => selectedStudentIds.delete(s.id));
+        renderStudents();
+      };
+    }
+
+    const clearSelBtn = document.getElementById('students-clear-selection');
+    if (clearSelBtn) {
+      clearSelBtn.onclick = () => { selectedStudentIds.clear(); renderStudents(); };
+    }
+
+    const delSelBtn = document.getElementById('students-delete-selected');
+    if (delSelBtn) {
+      delSelBtn.onclick = () => {
+        const ids = Array.from(selectedStudentIds);
+        if (ids.length === 0) return;
+        const names = ids.map(id => { const s = store.getStudent(id); return s ? s.name : ''; }).filter(Boolean);
+        const list = names.slice(0, 8).join(', ') + (names.length > 8 ? `, dan ${names.length - 8} lainnya` : '');
+        confirmAction({
+          title: 'Hapus Murid Terpilih',
+          message: `Anda akan menghapus <strong>${ids.length} murid</strong> beserta seluruh nilai, presensi, dan tabungannya secara permanen.`,
+          summaryHtml: `<div class="card" style="padding:10px 12px; background: var(--bg-main); font-size:0.82rem; color: var(--text-muted);">${list}</div>`,
+          confirmLabel: `Hapus ${ids.length} Murid`,
+          requireText: 'HAPUS',
+          onConfirm: () => {
+            const res = store.deleteStudents(ids);
+            selectedStudentIds.clear();
+            if (res.success) {
+              alert(`${res.count} murid berhasil dihapus!`);
+              renderStudents();
+              renderDashboard();
+              renderGradesRecap();
+            } else {
+              alert(`Gagal menghapus: ${res.error}`);
+            }
+          }
+        });
+      };
+    }
+
+    // STUDENT FORM MODAL ACTIONS
+    document.getElementById('open-add-student-btn').onclick = () => {
+      document.getElementById('student-form-title').innerText = 'Tambah Murid Baru';
+      document.getElementById('student-form').reset();
+      document.getElementById('student-id').value = '';
+      const accordion = document.querySelector('.form-accordion');
+      if (accordion) accordion.open = false; // Reset accordion to closed when adding new
+      openModal('modal-student-form');
+    };
+
+    document.getElementById('student-form').onsubmit = (e) => {
+      e.preventDefault();
+      const studentId = document.getElementById('student-id').value;
+      
+      const phoneInput = document.getElementById('student-parent-phone').value;
+      const formattedPhone = formatWhatsAppNumber(phoneInput);
+
+      const studentData = {
+        name: document.getElementById('student-name').value.trim(),
+        nis: document.getElementById('student-nis').value.trim(),
+        nisn: document.getElementById('student-nisn').value.trim(),
+        gender: document.getElementById('student-gender').value,
+        religion: document.getElementById('student-religion').value,
+        pob: document.getElementById('student-pob').value.trim(),
+        dob: document.getElementById('student-dob').value,
+        address: document.getElementById('student-address').value.trim(),
+        parentName: document.getElementById('student-parent-name').value.trim(),
+        parentJob: document.getElementById('student-parent-job').value.trim(),
+        parentPhone: formattedPhone,
+        parentAddress: document.getElementById('student-parent-address').value.trim() || document.getElementById('student-address').value.trim(),
+        notes: document.getElementById('student-notes').value.trim()
+      };
+
+      if (!studentData.name || !studentData.parentPhone) {
+        alert('Nama lengkap dan Nomor WhatsApp wajib diisi!');
+        return;
+      }
+
+      if (studentId) {
+        // Edit Mode
+        store.updateStudent(studentId, studentData);
+        alert('Data murid berhasil diperbarui!');
+      } else {
+        // Add Mode
+        store.addStudent(studentData);
+        alert('Murid baru berhasil ditambahkan!');
+      }
+
+      closeModal('modal-student-form');
+      renderStudents();
+      renderDashboard();
+    };
+
+    // ATTENDANCE DATE PICKER CHANGE
+    document.getElementById('attendance-date').onchange = (e) => {
+      attendanceSelectedDate = e.target.value;
+      renderAttendance();
+    };
+
+    // GRADES FORM SUBMIT
+    document.getElementById('grade-form').onsubmit = (e) => {
+      e.preventDefault();
+      const studentId = document.getElementById('grade-student-select').value;
+      const subject = document.getElementById('grade-subject-select').value;
+      
+      if (!studentId || !subject) {
+        alert('Silakan pilih murid dan mata pelajaran terlebih dahulu!');
+        return;
+      }
+
+      const assessments = store.getSubjectAssessments(subject);
+      assessments.forEach(a => {
+        const input = document.getElementById(`grade-${a.id}`);
+        if (input) {
+          store.saveGrade(studentId, subject, a.id, input.value);
+        }
+      });
+
+      alert('Nilai mata pelajaran berhasil disimpan!');
+      renderGradeGrid();
+      renderGradesRecap();
+    };
+
+    // GRADE GRID: SAVE ALL
+    const btnSaveGrid = document.getElementById('btn-save-grade-grid');
+    if (btnSaveGrid) {
+      btnSaveGrid.onclick = () => {
+        if (!gradeGridSubjectId) {
+          alert('Pilih mata pelajaran terlebih dahulu!');
+          return;
+        }
+        const map = {};
+        document.querySelectorAll('#grade-grid-body .grid-cell').forEach(inp => {
+          const sid = inp.getAttribute('data-student');
+          const aid = inp.getAttribute('data-assessment');
+          if (!map[sid]) map[sid] = {};
+          map[sid][aid] = inp.value;
+        });
+        store.saveGradesBatch(gradeGridSubjectId, map);
+        alert('Semua nilai berhasil disimpan!');
+        renderGradeGrid();
+        renderGradesRecap();
+        renderStudents();
+      };
+    }
+
+    // GRADE GRID: ADD COMPONENT
+    const btnAddGridComp = document.getElementById('btn-add-grid-component');
+    if (btnAddGridComp) {
+      btnAddGridComp.onclick = () => {
+        if (!gradeGridSubjectId) {
+          alert('Pilih mata pelajaran terlebih dahulu!');
+          return;
+        }
+        openAssessmentComponentModal(gradeGridSubjectId, () => renderGradeGrid());
+      };
+    }
+
+    // GRADE GRID: CLEAR ALL GRADES FOR THE SELECTED SUBJECT
+    const btnClearSubjGrades = document.getElementById('btn-clear-subject-grades');
+    if (btnClearSubjGrades) {
+      btnClearSubjGrades.onclick = () => {
+        if (!gradeGridSubjectId) {
+          alert('Pilih mata pelajaran terlebih dahulu!');
+          return;
+        }
+        const subjName = store.getSubjectLabel(gradeGridSubjectId);
+        confirmAction({
+          title: 'Kosongkan Nilai Mapel',
+          message: `Kosongkan <strong>seluruh nilai ${subjName}</strong> untuk semua murid? Mata pelajaran dan komponennya tetap ada.`,
+          confirmLabel: 'Kosongkan Nilai',
+          onConfirm: () => {
+            const res = store.clearSubjectGrades(gradeGridSubjectId);
+            alert(`Nilai ${subjName} berhasil dikosongkan (${res.cleared} entri).`);
+            renderGradeGrid();
+            renderGradesRecap();
+            renderStudents();
+          }
+        });
+      };
+    }
+
+    // CHARACTER FORM SUBMIT
+    document.getElementById('character-form').onsubmit = (e) => {
+      e.preventDefault();
+      const studentId = document.getElementById('character-student-select').value;
+      
+      if (!studentId) {
+        alert('Pilih murid terlebih dahulu!');
+        return;
+      }
+
+      const spIbadah = document.getElementById('char-spiritual-ibadah').value;
+      const spSyukur = document.getElementById('char-spiritual-syukur').value;
+      const spNotes = document.getElementById('char-spiritual-notes').value.trim();
+
+      const soJujur = document.getElementById('char-social-jujur').value;
+      const soDisiplin = document.getElementById('char-social-disiplin').value;
+      const soTanggung = document.getElementById('char-social-tanggungjawab').value;
+      const soNotes = document.getElementById('char-social-notes').value.trim();
+
+      store.saveCharacter(studentId, 'spiritual', 'ibadah', spIbadah);
+      store.saveCharacter(studentId, 'spiritual', 'syukur', spSyukur);
+      store.saveCharacter(studentId, 'spiritual', 'catatan', spNotes);
+
+      store.saveCharacter(studentId, 'social', 'jujur', soJujur);
+      store.saveCharacter(studentId, 'social', 'disiplin', soDisiplin);
+      store.saveCharacter(studentId, 'social', 'tanggungjawab', soTanggung);
+      store.saveCharacter(studentId, 'social', 'catatan', soNotes);
+
+      alert('Observasi karakter sikap berhasil disimpan!');
+    };
+
+    // FINANCE TAB SYSTEM
+    const finTabs = document.querySelectorAll('#finance .tab-btn');
+    finTabs.forEach(tab => {
+      tab.onclick = () => {
+        finTabs.forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('#finance .tab-content-panel').forEach(p => p.classList.remove('active'));
+
+        tab.classList.add('active');
+        document.getElementById(tab.getAttribute('data-tab')).classList.add('active');
+      };
+    });
+
+    // GRADES TAB SYSTEM (was missing — tabs could not be switched)
+    const gradeTabs = document.querySelectorAll('#grades .tab-btn');
+    gradeTabs.forEach(tab => {
+      tab.onclick = () => {
+        gradeTabs.forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('#grades .tab-content-panel').forEach(p => p.classList.remove('active'));
+
+        tab.classList.add('active');
+        const target = tab.getAttribute('data-tab');
+        const panel = document.getElementById(target);
+        if (panel) panel.classList.add('active');
+
+        // Refresh the panel being shown so it reflects the latest data.
+        if (target === 'tab-grades-grid') renderGradeGrid();
+        else if (target === 'tab-grades-recap') renderGradesRecap();
+      };
+    });
+
+    // ATTENDANCE TAB SYSTEM (was missing — recap tab unreachable)
+    const absenTabs = document.querySelectorAll('#attendance .tab-btn');
+    absenTabs.forEach(tab => {
+      tab.onclick = () => {
+        absenTabs.forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('#attendance .tab-content-panel').forEach(p => p.classList.remove('active'));
+
+        tab.classList.add('active');
+        const target = tab.getAttribute('data-tab');
+        const panel = document.getElementById(target);
+        if (panel) panel.classList.add('active');
+        if (target === 'tab-absen-recap' && typeof renderAttendanceRecap === 'function') renderAttendanceRecap();
+      };
+    });
+
+    // SAVINGS TRANSACTION SUBMIT
+    document.getElementById('saving-form').onsubmit = (e) => {
+      e.preventDefault();
+      const studentId = document.getElementById('saving-student-select').value;
+      const type = document.getElementById('saving-tx-type').value; // 'deposit'|'withdraw'
+      const amount = document.getElementById('saving-amount').value;
+      const note = document.getElementById('saving-notes').value.trim();
+
+      if (!studentId || !amount) {
+        alert('Pilih murid dan jumlah transaksi!');
+        return;
+      }
+
+      const res = store.addSavingTransaction(studentId, type, amount, note);
+      
+      if (res.success === false) {
+        alert(`Gagal transaksi: ${res.error}`);
+      } else {
+        alert(`Transaksi Tabungan berhasil! Saldo baru: ${formatRupiah(res.balance)}`);
+        document.getElementById('saving-form').reset();
+        renderFinance();
+        renderDashboard();
+      }
+    };
+
+    // CLASS CASH TRANSACTION SUBMIT
+    document.getElementById('cash-form').onsubmit = (e) => {
+      e.preventDefault();
+      const type = document.getElementById('cash-tx-type').value; // 'in'|'out'
+      const amount = document.getElementById('cash-amount').value;
+      const note = document.getElementById('cash-notes').value.trim();
+
+      if (!amount || !note) {
+        alert('Masukkan jumlah uang dan rincian pengeluaran/pemasukan!');
+        return;
+      }
+
+      const success = store.addClassCashTransaction(type, amount, note);
+      if (success) {
+        alert('Transaksi Kas Kelas berhasil dicatat!');
+        document.getElementById('cash-form').reset();
+        renderFinance();
+        renderDashboard();
+      } else {
+        alert('Gagal menyimpan transaksi kas!');
+      }
+    };
+
+    // SCHEDULE TAB SYSTEM
+    const schTabs = document.querySelectorAll('#schedule .tab-btn');
+    schTabs.forEach(tab => {
+      tab.onclick = () => {
+        schTabs.forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('#schedule .tab-content-panel').forEach(p => p.classList.remove('active'));
+        
+        tab.classList.add('active');
+        document.getElementById(tab.getAttribute('data-tab')).classList.add('active');
+      };
+    });
+
+    // LESSON FORM SUBMIT
+    document.getElementById('lesson-form').onsubmit = (e) => {
+      e.preventDefault();
+      const day = document.getElementById('lesson-day').value;
+      const start = document.getElementById('lesson-time-start').value;
+      const end = document.getElementById('lesson-time-end').value;
+      const subject = document.getElementById('lesson-subject').value.trim();
+      const teacher = document.getElementById('lesson-teacher').value.trim();
+
+      if (!day || !start || !end || !subject || !teacher) {
+        alert('Isi seluruh form mata pelajaran!');
+        return;
+      }
+
+      const lessonData = {
+        time: `${start} - ${end}`,
+        subject,
+        teacher
+      };
+
+      store.saveLesson(day, -1, lessonData);
+      alert('Jadwal pelajaran berhasil ditambahkan!');
+      document.getElementById('lesson-form').reset();
+      renderSchedule();
+    };
+
+    // PIKET FORM SUBMIT
+    document.getElementById('piket-form').onsubmit = (e) => {
+      e.preventDefault();
+      const day = document.getElementById('piket-day').value;
+      const checkedBoxes = document.querySelectorAll('input[name="piket-student"]:checked');
+      
+      if (!day) {
+        alert('Pilih hari piket!');
+        return;
+      }
+
+      const list = [];
+      checkedBoxes.forEach(cb => {
+        list.push(cb.value);
+      });
+
+      store.savePiket(day, list);
+      alert(`Jadwal piket hari ${day} berhasil diperbarui!`);
+      renderSchedule();
+    };
+
+    // CALENDAR AGENDA FORM SUBMIT
+    document.getElementById('calendar-form').onsubmit = (e) => {
+      e.preventDefault();
+      const date = document.getElementById('cal-event-date').value;
+      const title = document.getElementById('cal-event-title').value.trim();
+      const type = document.getElementById('cal-event-type').value;
+
+      if (!date || !title) {
+        alert('Tanggal dan Nama agenda wajib diisi!');
+        return;
+      }
+
+      store.addCalendarEvent(date, title, type);
+      alert('Agenda akademik baru berhasil disimpan!');
+      document.getElementById('calendar-form').reset();
+      renderSchedule();
+      renderDashboard();
+    };
+
+    // COMMUNICATION TAB SYSTEM
+    const commTabs = document.querySelectorAll('#communication .tab-btn');
+    commTabs.forEach(tab => {
+      tab.onclick = () => {
+        commTabs.forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('#communication .tab-content-panel').forEach(p => p.classList.remove('active'));
+        
+        tab.classList.add('active');
+        document.getElementById(tab.getAttribute('data-tab')).classList.add('active');
+      };
+    });
+
+    // ANNOUNCEMENT FORM SUBMIT
+    document.getElementById('announcement-form').onsubmit = (e) => {
+      e.preventDefault();
+      const title = document.getElementById('ann-title').value.trim();
+      const content = document.getElementById('ann-content').value.trim();
+
+      if (!title || !content) {
+        alert('Judul dan Isi Pengumuman wajib diisi!');
+        return;
+      }
+
+      store.addAnnouncement(title, content);
+      alert('Pengumuman baru berhasil diterbitkan!');
+      document.getElementById('announcement-form').reset();
+      renderAnnouncementsList();
+      renderDashboard();
+    };
+
+    // BROADCAST / LAPORAN PERSONAL SUBMIT
+    document.getElementById('broadcast-form').onsubmit = (e) => {
+      e.preventDefault();
+      const studentId = document.getElementById('comm-student-select').value;
+      const text = document.getElementById('broadcast-text-template').value.trim();
+
+      if (!studentId || !text) {
+        alert('Pilih siswa dan masukkan isi laporan!');
+        return;
+      }
+
+      const student = store.getStudent(studentId);
+      if (!student) return;
+
+      // Open WhatsApp URL
+      const waUrl = `https://wa.me/${student.parentPhone}?text=${encodeURIComponent(text)}`;
+      window.open(waUrl, '_blank');
+    };
+
+    // CLASS SETTINGS FORM SUBMIT
+    document.getElementById('class-settings-form').onsubmit = (e) => {
+      e.preventDefault();
+      const className = document.getElementById('settings-classname').value.trim();
+      const schoolName = document.getElementById('settings-schoolname').value.trim();
+      const curriculum = document.getElementById('settings-curriculum').value;
+      const year = document.getElementById('settings-year').value.trim();
+      const kkm = document.getElementById('settings-kkm').value;
+
+      if (!className || !schoolName || !year) {
+        alert('Seluruh kolom profil wajib diisi!');
+        return;
+      }
+
+      store.updateClassSettings(className, schoolName, curriculum, year, kkm);
+      updateHeaderBadge();
+      alert('Profil kelas berhasil disimpan!');
+      // Refresh views affected by KKM coloring.
+      renderStudents();
+    };
+
+    // SECURITY PASSWORD CHANGE SUBMIT
+    document.getElementById('password-settings-form').onsubmit = (e) => {
+      e.preventDefault();
+      const oldPass = document.getElementById('settings-old-pass').value;
+      const newPass = document.getElementById('settings-new-pass').value;
+
+      if (!oldPass || !newPass) {
+        alert('Mohon isi kolom kata sandi lama dan baru!');
+        return;
+      }
+
+      if (!store.checkPassword(oldPass)) {
+        alert('Kata sandi lama salah!');
+        return;
+      }
+
+      store.updatePassword(newPass);
+      alert('Kata sandi keamanan berhasil diperbarui!');
+      document.getElementById('password-settings-form').reset();
+    };
+
+    // BACKUP & RESTORE TRIGGERS
+    document.getElementById('backup-btn').onclick = () => {
+      const dataStr = store.exportData();
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Backup_WaliKelas_${store.state.settings.className.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    };
+
+    document.getElementById('restore-btn').onclick = () => {
+      document.getElementById('restore-file-input').click();
+    };
+
+    document.getElementById('restore-file-input').onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const result = store.importData(evt.target.result);
+        if (result.success) {
+          alert('Data kelas berhasil dipulihkan!');
+          location.reload();
+        } else {
+          alert(`Gagal memulihkan data: ${result.error}`);
+        }
+      };
+      reader.readAsText(file);
+    };
+
+    // LOAD DEMO DATA
+    document.getElementById('load-demo-btn').onclick = () => {
+      confirmAction({
+        title: 'Muat Data Demo',
+        message: 'Memuat data demo akan <strong>menimpa seluruh data kelas saat ini</strong>. Disarankan backup dulu. Lanjutkan?',
+        confirmLabel: 'Muat Demo',
+        danger: false,
+        onConfirm: () => {
+          store.loadDemoData();
+          alert('Data demo sekolah berhasil dimuat!');
+          location.reload();
+        }
+      });
+    };
+
+    // RESET ALL DATA
+    document.getElementById('reset-data-btn').onclick = () => {
+      confirmAction({
+        title: 'Hapus Seluruh Data Kelas',
+        message: 'Ini akan menghapus <strong>seluruh data siswa, nilai, presensi, kas, dan tabungan</strong> secara permanen dan tidak dapat dibatalkan.',
+        summaryHtml: `<div class="card" style="padding:10px 12px; background: var(--bg-main); font-size:0.82rem; color: var(--text-muted);">${store.state.students.length} murid beserta seluruh catatannya akan dihapus.</div>`,
+        confirmLabel: 'Hapus Semua',
+        requireText: 'HAPUS SEMUA',
+        onConfirm: () => {
+          store.resetData();
+          alert('Aplikasi berhasil dikosongkan!');
+          location.reload();
+        }
+      });
+    };
+
+    // GRADES CSV EXPORT
+    document.getElementById('export-grades-btn').onclick = () => {
+      exportGradesToCSV();
+    };
+
+    // QUICK GRADE FORM SUBMIT
+    document.getElementById('quick-grade-form').onsubmit = (e) => {
+      e.preventDefault();
+      const studentId = document.getElementById('quick-grade-student-id').value;
+      const subject = document.getElementById('quick-grade-subject').value;
+      
+      const assessments = store.getSubjectAssessments(subject);
+      assessments.forEach(a => {
+        const input = document.getElementById(`quick-grade-${a.id}`);
+        if (input) {
+          store.saveGrade(studentId, subject, a.id, input.value);
+        }
+      });
+
+      alert('Nilai mata pelajaran berhasil disimpan!');
+      closeModal('modal-quick-grade');
+      renderStudents();
+      renderGradesRecap();
+    };
+
+    // QUICK SAVING FORM SUBMIT
+    document.getElementById('quick-saving-form').onsubmit = (e) => {
+      e.preventDefault();
+      const studentId = document.getElementById('quick-saving-student-id').value;
+      const type = document.getElementById('quick-saving-type').value; // 'deposit'|'withdraw'
+      const amount = parseFloat(document.getElementById('quick-saving-amount').value);
+      const note = document.getElementById('quick-saving-notes').value.trim();
+
+      const res = store.addSavingTransaction(studentId, type, amount, note);
+      
+      if (res.success === false) {
+        alert(`Gagal transaksi: ${res.error}`);
+      } else {
+        alert(`Transaksi Tabungan berhasil! Saldo baru: ${formatRupiah(res.balance)}`);
+        closeModal('modal-quick-saving');
+        renderStudents();
+        renderFinance();
+        renderDashboard();
+      }
+    };
+
+    // Close modals on clicking close buttons or background overlays
+    const modals = document.querySelectorAll('.modal-overlay');
+    modals.forEach(modal => {
+      const closeBtns = modal.querySelectorAll('.modal-close');
+      closeBtns.forEach(btn => {
+        btn.onclick = () => closeModal(modal.id);
+      });
+      
+      modal.onclick = (e) => {
+        if (e.target === modal) {
+          closeModal(modal.id);
+        }
+      };
+    });
+  }
+
+  // --- EXPORT GRADES TO CSV FOR EXCEL ---
+  function exportGradesToCSV() {
+    const students = store.state.students;
+    if (students.length === 0) {
+      alert('Tidak ada data murid untuk diekspor!');
+      return;
+    }
+
+    const lessonsList = store.getSubjects();
+
+    // Sanitize cell values for semicolon-separated CSV.
+    const esc = (v) => {
+      const s = (v === null || v === undefined) ? '' : String(v);
+      return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+
+    // Build dynamic header from each subject's actual components.
+    let header = 'NIS;NISN;Nama Murid;L/P;';
+    const subjectAssessments = {};
+    lessonsList.forEach(subj => {
+      const assessments = store.getSubjectAssessments(subj.id);
+      subjectAssessments[subj.id] = assessments;
+      assessments.forEach(a => {
+        header += `${esc(subj.name + ' - ' + a.name)};`;
+      });
+      header += `${esc(subj.name + ' - Rata-rata')};`;
+    });
+    header += 'Rata_Rata_Umum\n';
+
+    let csvContent = header;
+
+    // Student rows
+    students.forEach(student => {
+      let row = `${esc(student.nis)};${esc(student.nisn)};${esc(student.name)};${esc(student.gender)};`;
+
+      lessonsList.forEach(subj => {
+        const scores = store.getGrades(student.id)[subj.id] || {};
+        subjectAssessments[subj.id].forEach(a => {
+          const v = scores[a.id];
+          row += `${(v === undefined || v === null) ? '' : v};`;
+        });
+        const avg = store.getSubjectAverage(student.id, subj.id);
+        row += `${avg === null ? '' : avg};`;
+      });
+
+      const overallAvg = store.getStudentOverallAverage(student.id);
+      row += `${overallAvg === null ? '' : overallAvg}\n`;
+      csvContent += row;
+    });
+
+    // Download file
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' }); // \ufeff solves Indonesian / UTF-8 Excel charset bug
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Rekap_Nilai_${store.state.settings.className.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  // --- HELPERS ---
+  function openModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+      modal.classList.add('active');
+      document.body.style.overflow = 'hidden'; // Disable scroll on back
+    }
+  }
+
+  function closeModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+      modal.classList.remove('active');
+      document.body.style.overflow = '';
+      
+      if (modalId === 'modal-add-subject') {
+        const triggerInput = document.getElementById('add-subject-trigger-select');
+        if (triggerInput && triggerInput.value) {
+          const selectElement = document.getElementById(triggerInput.value);
+          if (selectElement && selectElement.value === 'add_new_subject') {
+            selectElement.selectedIndex = 0;
+          }
+        }
+      }
+    }
+  }
+
+  // Reusable, styled confirmation dialog. Replaces native confirm().
+  // opts: { title, message, summaryHtml, confirmLabel, danger, requireText, onConfirm }
+  function confirmAction(opts) {
+    const o = opts || {};
+    const titleEl = document.getElementById('confirm-title');
+    const msgEl = document.getElementById('confirm-message');
+    const sumEl = document.getElementById('confirm-summary');
+    const reqWrap = document.getElementById('confirm-require-wrap');
+    const reqLabel = document.getElementById('confirm-require-label');
+    const reqInput = document.getElementById('confirm-require-input');
+    const btn = document.getElementById('confirm-action-btn');
+    if (!btn) return;
+
+    titleEl.innerHTML = `<i class="fas fa-triangle-exclamation"></i> ${o.title || 'Konfirmasi'}`;
+    msgEl.innerHTML = o.message || '';
+    sumEl.innerHTML = o.summaryHtml || '';
+    btn.textContent = o.confirmLabel || 'Hapus';
+    btn.className = 'btn ' + (o.danger === false ? 'btn-primary' : 'btn-danger');
+
+    const requireText = o.requireText || null;
+    if (requireText) {
+      reqWrap.style.display = '';
+      reqLabel.textContent = `Ketik "${requireText}" untuk mengonfirmasi:`;
+      reqInput.value = '';
+      reqInput.placeholder = requireText;
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
+      reqInput.oninput = () => {
+        const ok = reqInput.value.trim() === requireText;
+        btn.disabled = !ok;
+        btn.style.opacity = ok ? '1' : '0.5';
+      };
+    } else {
+      reqWrap.style.display = 'none';
+      reqInput.oninput = null;
+      btn.disabled = false;
+      btn.style.opacity = '1';
+    }
+
+    btn.onclick = () => {
+      if (requireText && reqInput.value.trim() !== requireText) return;
+      closeModal('modal-confirm');
+      if (typeof o.onConfirm === 'function') o.onConfirm();
+    };
+
+    openModal('modal-confirm');
+    if (requireText) setTimeout(() => reqInput.focus(), 60);
+  }
+
+  // Human-readable name for a grade category id.
+  function categoryName(catId) {
+    const c = store.getGradeCategories().find(x => x.id === catId);
+    return c ? c.name : catId;
+  }
+
+  // Live total feedback for the per-subject weight editor.
+  function updateEditWeightTotal() {
+    const el = document.getElementById('edit-weight-total');
+    if (!el) return;
+    const vals = ['tugas', 'uh', 'uts', 'uas'].map(k => parseFloat(document.getElementById('edit-weight-' + k).value) || 0);
+    const total = vals.reduce((a, b) => a + b, 0);
+    if (total === 100) {
+      el.innerHTML = `Total bobot: <strong style="color:var(--success);">${total}%</strong> ✓`;
+    } else {
+      el.innerHTML = `Total bobot: <strong style="color:var(--warning,#d97706);">${total}%</strong> — idealnya 100% (sistem tetap menormalisasi otomatis).`;
+    }
+  }
+
+  // Formatting currency to Indonesian Rupiah
+  function formatRupiah(amount) {
+    return 'Rp ' + (amount || 0).toLocaleString('id-ID');
+  }
+
+  // Formatting ISO date string to Indonesian style date
+  function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    
+    const months = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    
+    return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+  }
+
+  // Translate rating character codes to readable words
+  function translateRating(code) {
+    const dict = {
+      'SB': 'Sangat Baik (SB)',
+      'B': 'Baik (B)',
+      'C': 'Cukup (C)',
+      'PB': 'Perlu Bimbingan (PB)'
+    };
+    return dict[code] || code;
+  }
+
+  // Formatting input number to clean Indonesian Phone number format
+  function formatWhatsAppNumber(phone) {
+    let cleaned = phone.replace(/\D/g, ''); // numbers only
+    
+    if (cleaned.startsWith('0')) {
+      cleaned = '62' + cleaned.substring(1);
+    } else if (cleaned.startsWith('8')) {
+      cleaned = '62' + cleaned;
+    }
+    
+    // Default country fallback if too short
+    if (!cleaned.startsWith('62') && cleaned.length > 5) {
+      cleaned = '62' + cleaned;
+    }
+    
+    return cleaned || '628';
+  }
+
+  // --- QUICK GRADE MODAL FUNCTIONALITY ---
+  function showQuickGradeModal(studentId) {
+    const student = store.getStudent(studentId);
+    if (!student) return;
+
+    document.getElementById('quick-grade-student-id').value = studentId;
+    document.getElementById('quick-grade-student-name').innerText = student.name;
+
+    // Load existing grades if any for default subject
+    const defaultSubj = (store.state.settings.subjects && store.state.settings.subjects.length > 0) 
+      ? store.state.settings.subjects[0].id 
+      : 'matematika';
+    
+    document.getElementById('quick-grade-subject').value = defaultSubj;
+    renderDynamicAssessments('quick-grade-inputs-container', defaultSubj, studentId, 'quick-grade');
+
+    // Bind change listener for subject select
+    document.getElementById('quick-grade-subject').onchange = (e) => {
+      if (e.target.value === 'add_new_subject') {
+        handleAddNewSubject(e.target);
+      } else {
+        renderDynamicAssessments('quick-grade-inputs-container', e.target.value, studentId, 'quick-grade');
+      }
+    };
+
+    openModal('modal-quick-grade');
+  }
+
+  function loadQuickGradeSubjectData(studentId, subject) {
+    renderDynamicAssessments('quick-grade-inputs-container', subject, studentId, 'quick-grade');
+  }
+
+  // --- QUICK SAVING MODAL FUNCTIONALITY ---
+  function showQuickSavingModal(studentId) {
+    const student = store.getStudent(studentId);
+    if (!student) return;
+
+    const sav = store.getSavings(studentId);
+
+    document.getElementById('quick-saving-student-id').value = studentId;
+    document.getElementById('quick-saving-student-name').innerText = student.name;
+    document.getElementById('quick-saving-current-balance').innerText = formatRupiah(sav.balance);
+    
+    // Clear inputs
+    document.getElementById('quick-saving-amount').value = '';
+    document.getElementById('quick-saving-notes').value = '';
+    document.getElementById('quick-saving-type').value = 'deposit';
+
+    openModal('modal-quick-saving');
+  }
+
+  // --- GRADE GRID (input nilai sekelas sekaligus) ---
+  // Build the ordered category layout for the currently selected subject.
+  function gridCategoryLayout() {
+    const assessments = store.getSubjectAssessments(gradeGridSubjectId);
+    const weights = store.getCategoryWeights(gradeGridSubjectId);
+    return store.getGradeCategories().map(cat => {
+      const comps = assessments.filter(a => a.category === cat.id);
+      return {
+        id: cat.id,
+        name: cat.name,
+        multi: cat.multi,
+        weight: weights[cat.id] || 0,
+        comps,
+        showAvg: cat.multi && comps.length > 1   // show "Rata" sub-column
+      };
+    }).filter(c => c.comps.length > 0);
+  }
+
+  function renderGradeGrid() {
+    const subjectSelect = document.getElementById('grade-grid-subject');
+    const table = document.getElementById('grade-grid-table');
+    const body = document.getElementById('grade-grid-body');
+    if (!subjectSelect || !table || !body) return;
+    const thead = table.querySelector('thead');
+
+    const subjects = store.getSubjects();
+    subjectSelect.innerHTML = subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+    if (!gradeGridSubjectId || !subjects.some(s => s.id === gradeGridSubjectId)) {
+      gradeGridSubjectId = subjects[0] ? subjects[0].id : '';
+    }
+    subjectSelect.value = gradeGridSubjectId;
+    subjectSelect.onchange = () => {
+      gradeGridSubjectId = subjectSelect.value;
+      renderGradeGrid();
+    };
+
+    const students = store.state.students;
+    const kkm = store.getKkm();
+    const layout = gradeGridSubjectId ? gridCategoryLayout() : [];
+    const totalCols = 3 + layout.reduce((n, c) => n + c.comps.length + (c.showAvg ? 1 : 0), 0);
+
+    // Two-row grouped header: category groups on top, components below.
+    let row1 = '<th rowspan="2" style="width:36px;">No</th><th rowspan="2" style="min-width:120px;">Nama Murid</th>';
+    let row2 = '';
+    layout.forEach(c => {
+      const span = c.comps.length + (c.showAvg ? 1 : 0);
+      row1 += `<th colspan="${span}" class="text-center" style="background:var(--bg-main);">${c.name} <span style="font-weight:400;font-size:0.7rem;color:var(--text-muted);">(${c.weight}%)</span></th>`;
+      c.comps.forEach(comp => { row2 += `<th class="text-center" style="font-size:0.78rem;">${comp.name}</th>`; });
+      if (c.showAvg) row2 += `<th class="text-center" style="font-size:0.72rem;color:var(--text-muted);">Rata ${c.name}</th>`;
+    });
+    row1 += '<th rowspan="2" class="text-center" style="background-color: var(--primary-light); color: var(--primary);">Nilai Akhir</th>';
+    thead.innerHTML = `<tr>${row1}</tr><tr>${row2}</tr>`;
+
+    if (students.length === 0) {
+      body.innerHTML = `<tr><td colspan="${totalCols}" class="text-center text-muted py-4">Belum ada data murid.</td></tr>`;
+      return;
+    }
+    if (layout.length === 0) {
+      body.innerHTML = `<tr><td colspan="${totalCols}" class="text-center text-muted py-4">Pilih mata pelajaran terlebih dahulu.</td></tr>`;
+      return;
+    }
+
+    body.innerHTML = '';
+    students.forEach((student, idx) => {
+      const scores = store.getGrades(student.id)[gradeGridSubjectId] || {};
+      const catAvgs = store.getSubjectCategoryAverages(student.id, gradeGridSubjectId);
+      let cells = `<td>${idx + 1}</td><td><strong>${student.name}</strong></td>`;
+      layout.forEach(c => {
+        c.comps.forEach(comp => {
+          const v = scores[comp.id] !== undefined ? scores[comp.id] : '';
+          cells += `<td style="text-align:center;"><input type="number" min="0" max="100" class="grade-input-box grid-cell" data-student="${student.id}" data-assessment="${comp.id}" data-cat="${c.id}" value="${v}" placeholder="-" style="width:58px;text-align:center;padding:6px;"></td>`;
+        });
+        if (c.showAvg) {
+          const ca = catAvgs[c.id].avg;
+          cells += `<td class="text-center grid-cat-avg" data-student="${student.id}" data-cat="${c.id}" style="font-weight:600;color:var(--text-muted);">${ca === null ? '-' : ca}</td>`;
+        }
+      });
+      const avg = store.getSubjectAverage(student.id, gradeGridSubjectId);
+      cells += `<td class="text-center grid-avg" data-student="${student.id}" style="font-weight:700;${avg !== null && avg < kkm ? 'color:var(--danger);' : ''}">${avg === null ? '-' : avg}</td>`;
+      const tr = document.createElement('tr');
+      tr.innerHTML = cells;
+      body.appendChild(tr);
+    });
+
+    // Live recompute category + final averages as the teacher types.
+    body.querySelectorAll('.grid-cell').forEach(inp => {
+      inp.oninput = () => recomputeGridRow(inp.getAttribute('data-student'));
+    });
+  }
+
+  function recomputeGridRow(studentId) {
+    const kkm = store.getKkm();
+    const weights = store.getCategoryWeights(gradeGridSubjectId);
+    // Reset category-average cells (empty categories should fall back to '-').
+    document.querySelectorAll(`#grade-grid-body .grid-cat-avg[data-student="${studentId}"]`).forEach(c => { c.textContent = '-'; });
+    // Collect entered values per category from the live inputs.
+    const byCat = {};
+    document.querySelectorAll(`#grade-grid-body .grid-cell[data-student="${studentId}"]`).forEach(inp => {
+      const cat = inp.getAttribute('data-cat');
+      const val = parseFloat(inp.value);
+      if (inp.value.trim() !== '' && !isNaN(val)) {
+        (byCat[cat] = byCat[cat] || []).push(Math.max(0, Math.min(100, val)));
+      }
+    });
+
+    let weightedSum = 0;
+    let weightTotal = 0;
+    Object.keys(byCat).forEach(cat => {
+      const arr = byCat[cat];
+      const catAvg = Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 100) / 100;
+      // Update the per-category average cell if present.
+      const ca = document.querySelector(`#grade-grid-body .grid-cat-avg[data-student="${studentId}"][data-cat="${cat}"]`);
+      if (ca) ca.textContent = catAvg;
+      const w = weights[cat] || 0;
+      if (w > 0) { weightedSum += catAvg * w; weightTotal += w; }
+    });
+
+    const avgCell = document.querySelector(`#grade-grid-body .grid-avg[data-student="${studentId}"]`);
+    if (!avgCell) return;
+    if (weightTotal === 0) {
+      avgCell.textContent = '-';
+      avgCell.style.color = '';
+    } else {
+      const avg = Math.round(weightedSum / weightTotal);
+      avgCell.textContent = avg;
+      avgCell.style.color = avg < kkm ? 'var(--danger)' : '';
+    }
+  }
+
+  function openAssessmentComponentModal(subjectId, rerenderFn) {
+    document.getElementById('assessment-subject-id').value = subjectId;
+    const catSel = document.getElementById('assessment-comp-category');
+    const nameInput = document.getElementById('assessment-comp-name');
+    catSel.value = 'tugas';
+    nameInput.value = store.suggestAssessmentName(subjectId, 'tugas');
+    // Refresh the suggested name when the category changes.
+    catSel.onchange = () => {
+      nameInput.value = store.suggestAssessmentName(subjectId, catSel.value);
+    };
+    pendingAssessmentRerender = rerenderFn || null;
+    openModal('modal-assessment-component');
+  }
+
+  function populateSubjectDropdowns() {
+    const subjects = store.state.settings.subjects || [
+      { id: 'matematika', name: 'Matematika' },
+      { id: 'indonesia', name: 'Bahasa Indonesia' },
+      { id: 'ipa', name: 'IPA / IPAS' },
+      { id: 'agama', name: 'Pendidikan Agama' }
+    ];
+
+    const quickSelect = document.getElementById('quick-grade-subject');
+    const mainSelect = document.getElementById('grade-subject-select');
+
+    if (quickSelect) {
+      quickSelect.innerHTML = subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('') + 
+        `<option value="add_new_subject" style="font-weight: bold; color: var(--primary);">+ Tambah Mata Pelajaran Baru...</option>`;
+    }
+
+    if (mainSelect) {
+      mainSelect.innerHTML = `<option value="">-- Pilih Mapel --</option>` + 
+        subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('') + 
+        `<option value="add_new_subject" style="font-weight: bold; color: var(--primary);">+ Tambah Mata Pelajaran Baru...</option>`;
+    }
+  }
+
+  function handleAddNewSubject(selectElement) {
+    const triggerInput = document.getElementById('add-subject-trigger-select');
+    if (triggerInput) triggerInput.value = selectElement.id;
+    
+    const nameInput = document.getElementById('new-subject-name');
+    if (nameInput) nameInput.value = '';
+
+    openModal('modal-add-subject');
+  }
+
+  // Handle database sync completed event
+  window.addEventListener('walikelas_sync_completed', () => {
+    console.log('Database synced from Supabase. Refreshing current view...');
+    navigateToPage(currentActivePage);
+    updateHeaderBadge();
+    populateSubjectDropdowns();
+  });
+});

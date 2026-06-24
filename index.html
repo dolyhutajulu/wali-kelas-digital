@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WaliKelas Digital - Sistem Informasi Wali Kelas SD/MI</title>
+  <!-- Google Fonts & FontAwesome -->
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+  <!-- ==========================================
+       1. SECURITY SCREEN / PASSWORD LOCK
+       ========================================== -->
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <i class="fas fa-graduation-cap"></i>
+      </div>
+      <h2 class="auth-title">WaliKelas Digital</h2>
+      <p class="auth-subtitle">Masukkan kata sandi wali kelas untuk mengakses data murid.</p>
+      
+      <form id="login-form" class="auth-form">
+        <div class="input-group">
+          <label for="pin-input">KATA SANDI WALI KELAS</label>
+          <div class="input-wrapper">
+            <i class="fas fa-lock"></i>
+            <input type="password" id="pin-input" placeholder="Masukkan Sandi (Bawaan: admin)" required autocomplete="current-password">
+            <button type="button" id="pin-toggle" class="password-toggle">
+              <i class="fas fa-eye"></i>
+            </button>
+          </div>
+        </div>
+        <button type="submit" class="auth-btn">MASUK SISTEM <i class="fas fa-arrow-right" style="margin-left: 8px;"></i></button>
+      </form>
+      
+      <div class="auth-footer">
+        <p>&copy; 2026 WaliKelas Digital. Client-Side Encryption.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       2. MAIN APPLICATION CONTAINER
+       ========================================== -->
+  <div id="app-container">
+    
+    <!-- MOBILE SIDEBAR BACKDROP OVERLAY -->
+    <div class="sidebar-overlay"></div>
+
+    <!-- SIDEBAR NAVIGATION (DESKTOP) -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">
+          <i class="fas fa-school"></i>
+        </div>
+        <div class="sidebar-title">
+          WaliKelas
+          <span>Asisten Guru Digital</span>
+        </div>
+      </div>
+      
+      <ul class="sidebar-menu">
+        <li class="menu-item active">
+          <a href="#dashboard"><i class="fas fa-columns"></i> Dashboard</a>
+        </li>
+        <li class="menu-item">
+          <a href="#students"><i class="fas fa-user-graduate"></i> Buku Induk</a>
+        </li>
+        <li class="menu-item">
+          <a href="#attendance"><i class="fas fa-calendar-check"></i> Kehadiran</a>
+        </li>
+        <li class="menu-item">
+          <a href="#grades"><i class="fas fa-file-invoice-dollar"></i> Nilai & Akademik</a>
+        </li>
+        <li class="menu-item">
+          <a href="#finance"><i class="fas fa-wallet"></i> Keuangan Kelas</a>
+        </li>
+        <li class="menu-item">
+          <a href="#schedule"><i class="fas fa-clock"></i> Jadwal & Piket</a>
+        </li>
+        <li class="menu-item">
+          <a href="#communication"><i class="fas fa-bullhorn"></i> Buku Penghubung</a>
+        </li>
+        <li class="menu-item">
+          <a href="#settings"><i class="fas fa-cog"></i> Pengaturan</a>
+        </li>
+      </ul>
+
+      <div class="sidebar-footer">
+        <div class="profile-card">
+          <div class="profile-avatar">WK</div>
+          <div class="profile-info">
+            <div id="user-name" class="profile-name">SDN Harapan</div>
+            <div class="profile-role">Wali Kelas</div>
+          </div>
+          <button id="logout-btn" class="logout-btn" title="Kunci Aplikasi">
+            <i class="fas fa-sign-out-alt"></i>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN INTERFACE SHELL -->
+    <div class="main-wrapper">
+      
+      <!-- TOP HEADER BAR -->
+      <header class="main-header">
+        <div class="header-left">
+          <button class="menu-toggle" aria-label="Buka Menu">
+            <i class="fas fa-bars"></i>
+          </button>
+          <div class="page-title-container">
+            <h2 id="header-title">Dashboard</h2>
+            <p id="header-subtitle">Ringkasan aktivitas hari ini</p>
+          </div>
+        </div>
+        <div class="header-right" style="display: flex; align-items: center; gap: 10px;">
+          <div id="supabase-sync-status" class="sync-status offline" title="Supabase Cloud Sync Status" style="display: flex; align-items: center; gap: 6px; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); background-color: var(--bg-main); padding: 5px 10px; border-radius: 20px; border: 1px solid var(--border-color);">
+            <i class="fas fa-cloud"></i> <span id="sync-status-text">Menghubungkan...</span>
+          </div>
+          <span id="class-badge" class="class-badge">Kelas 4-A | 2025/2026</span>
+        </div>
+      </header>
+
+      <!-- VIEW DYNAMIC CONTENT AREA -->
+      <main class="content-area">
+
+        <!-- ==========================================
+             PAGE 1: DASHBOARD
+             ========================================== -->
+        <section id="dashboard" class="page-view active">
+          <!-- Stat Grid -->
+          <div class="card-grid">
+            <div class="stat-card primary">
+              <div class="stat-card-info">
+                <h3>Total Murid</h3>
+                <p id="dash-stat-students">0</p>
+              </div>
+              <div class="stat-card-icon"><i class="fas fa-user-graduate"></i></div>
+            </div>
+            
+            <div class="stat-card success">
+              <div class="stat-card-info">
+                <h3>Presensi Hari Ini</h3>
+                <p id="dash-stat-attendance">0 Murid</p>
+              </div>
+              <div class="stat-card-icon"><i class="fas fa-calendar-check"></i></div>
+            </div>
+            
+            <div class="stat-card warning">
+              <div class="stat-card-info">
+                <h3>Uang Kas Kelas</h3>
+                <p id="dash-stat-cash">Rp 0</p>
+              </div>
+              <div class="stat-card-icon"><i class="fas fa-cash-register"></i></div>
+            </div>
+            
+            <div class="stat-card info">
+              <div class="stat-card-info">
+                <h3>Tabungan Siswa</h3>
+                <p id="dash-stat-savings">Rp 0</p>
+              </div>
+              <div class="stat-card-icon"><i class="fas fa-piggy-bank"></i></div>
+            </div>
+          </div>
+
+          <!-- Quick Actions & Recent Updates -->
+          <div class="dash-layout">
+            <!-- Left Side: Quick actions and updates -->
+            <div>
+              <div class="card" style="margin-bottom: 20px;">
+                <h3 class="card-title"><i class="fas fa-bolt"></i> Menu Cepat Wali Kelas</h3>
+                <div class="quick-actions">
+                  <button id="action-absen" class="quick-action-btn">
+                    <i class="fas fa-check-double"></i>
+                    <span>Absen Harian</span>
+                  </button>
+                  <button id="action-nilai" class="quick-action-btn">
+                    <i class="fas fa-award"></i>
+                    <span>Input Nilai</span>
+                  </button>
+                  <button id="action-kas" class="quick-action-btn">
+                    <i class="fas fa-coins"></i>
+                    <span>Buku Kas</span>
+                  </button>
+                  <button id="action-siswa" class="quick-action-btn">
+                    <i class="fas fa-user-plus"></i>
+                    <span>Tambah Murid</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Side: Recent activity log feed -->
+            <div class="card">
+              <h3 class="card-title"><i class="fas fa-stream"></i> Agenda & Aktivitas Terbaru</h3>
+              <div id="dashboard-feed-list" class="feed-list">
+                <!-- Loaded dynamically by JS -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             PAGE 2: BUKU INDUK SISWA
+             ========================================== -->
+        <section id="students" class="page-view">
+          <div class="toolbar">
+            <div class="search-bar">
+              <i class="fas fa-search"></i>
+              <input type="text" id="search-student" placeholder="Cari nama, NIS, atau NISN murid...">
+            </div>
+            <button id="open-add-student-btn" class="btn btn-primary">
+              <i class="fas fa-plus"></i> Tambah Murid Baru
+            </button>
+          </div>
+
+          <!-- Bulk action bar (shown when ≥1 student selected) -->
+          <div id="students-bulk-bar" style="display:none; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; background: var(--primary-light); border:1px solid var(--primary); border-radius: var(--radius-md); padding: 10px 14px; margin-bottom: 14px;">
+            <span id="students-selected-count" style="font-weight:600; color: var(--primary); font-size:0.9rem;"></span>
+            <div style="display:flex; gap:8px;">
+              <button id="students-clear-selection" type="button" class="btn btn-secondary" style="padding:6px 12px; font-size:0.8rem;">Batal Pilih</button>
+              <button id="students-delete-selected" type="button" class="btn btn-danger" style="padding:6px 12px; font-size:0.8rem;"><i class="fas fa-trash-alt"></i> Hapus Terpilih</button>
+            </div>
+          </div>
+
+          <div class="table-wrapper">
+            <table class="table-custom">
+              <thead>
+                <tr>
+                  <th style="width: 36px; text-align:center;"><input type="checkbox" id="students-select-all" title="Pilih semua" style="cursor:pointer;"></th>
+                  <th style="width: 50px;">No</th>
+                  <th>Nama Murid</th>
+                  <th>NIS / NISN</th>
+                  <th style="text-align: center; width: 60px;">L/P</th>
+                  <th style="width: 150px; text-align: center;">Presensi Hari Ini</th>
+                  <th style="text-align: right;">Tabungan</th>
+                  <th style="text-align: center;">Rata Nilai</th>
+                  <th style="text-align: center;">Kehadiran</th>
+                  <th style="text-align: center; width: 260px;">Aksi Cepat</th>
+                </tr>
+              </thead>
+              <tbody id="student-list-table-body">
+                <!-- Loaded dynamically by JS -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             PAGE 3: PRESENSI KEHADIRAN
+             ========================================== -->
+        <section id="attendance" class="page-view">
+          <div class="tabs-container">
+            <button class="tab-btn active" data-tab="tab-absen-input">Input Presensi</button>
+            <button class="tab-btn" data-tab="tab-absen-recap">Rekapitulasi Presensi</button>
+          </div>
+
+          <!-- Tab 1: Input Presensi -->
+          <div id="tab-absen-input" class="tab-content-panel active">
+            <div class="date-selector-container">
+              <label for="attendance-date" style="font-weight:600; font-size:0.9rem;"><i class="far fa-calendar-alt"></i> Tanggal Presensi:</label>
+              <input type="date" id="attendance-date">
+            </div>
+
+            <div class="attendance-table-container">
+              <div id="attendance-student-list">
+                <!-- Loaded dynamically by JS -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 2: Rekapitulasi Presensi -->
+          <div id="tab-absen-recap" class="tab-content-panel">
+            <div class="card" style="margin-bottom: 20px;">
+              <h4 style="margin-bottom:10px;"><i class="fas fa-chart-line"></i> Rekapitulasi Presensi Kelas</h4>
+              <p class="text-muted" style="font-size: 0.85rem;">Sistem otomatis menghitung total kehadiran siswa yang terakumulasi di database browser ini untuk kebutuhan pengisian Rapor.</p>
+            </div>
+
+            <div class="table-wrapper">
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th style="width: 50px;">No</th>
+                    <th>Nama Murid</th>
+                    <th class="text-center" style="width: 80px;">Hadir</th>
+                    <th class="text-center" style="width: 80px;">Sakit</th>
+                    <th class="text-center" style="width: 80px;">Izin</th>
+                    <th class="text-center" style="width: 80px;">Alfa</th>
+                    <th class="text-center" style="width: 100px;">Persentase</th>
+                  </tr>
+                </thead>
+                <tbody id="attendance-recap-table-body">
+                  <!-- Loaded dynamically by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             PAGE 4: NILAI & AKADEMIK
+             ========================================== -->
+        <section id="grades" class="page-view">
+          <div class="tabs-container">
+            <button class="tab-btn active" data-tab="tab-grades-grid">Input Sekelas (Grid)</button>
+            <button class="tab-btn" data-tab="tab-grades-input">Input Per Siswa</button>
+            <button class="tab-btn" data-tab="tab-grades-character">Observasi Sikap</button>
+            <button class="tab-btn" data-tab="tab-grades-recap">Tabel Rekap Nilai</button>
+          </div>
+
+          <!-- Tab 0: Input Nilai Grid Sekelas -->
+          <div id="tab-grades-grid" class="tab-content-panel active">
+            <div class="card" style="margin-bottom: 15px;">
+              <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 12px;">
+                <i class="fas fa-bolt"></i> Isi nilai satu mata pelajaran untuk <strong>seluruh siswa sekaligus</strong>. Kolom rata-rata dihitung otomatis berbobot. Sel di bawah KKM ditandai merah.
+              </p>
+              <div class="form-row" style="align-items: flex-end;">
+                <div class="input-group" style="margin-bottom: 0;">
+                  <label for="grade-grid-subject">MATA PELAJARAN</label>
+                  <div class="input-wrapper">
+                    <i class="fas fa-book"></i>
+                    <select id="grade-grid-subject"></select>
+                  </div>
+                </div>
+                <button type="button" id="btn-add-grid-component" class="btn btn-outline" style="border: 1px dashed var(--primary); color: var(--primary); background: none;">
+                  <i class="fas fa-plus-circle"></i> Tambah Komponen
+                </button>
+                <button type="button" id="btn-clear-subject-grades" class="btn btn-outline" style="border: 1px dashed var(--danger); color: var(--danger); background: none;">
+                  <i class="fas fa-eraser"></i> Kosongkan Nilai Mapel Ini
+                </button>
+              </div>
+            </div>
+
+            <div class="table-wrapper">
+              <table class="table-custom" id="grade-grid-table">
+                <thead><tr id="grade-grid-header-row"></tr></thead>
+                <tbody id="grade-grid-body"></tbody>
+              </table>
+            </div>
+
+            <button type="button" id="btn-save-grade-grid" class="btn btn-primary" style="margin-top: 15px;">
+              <i class="fas fa-save"></i> Simpan Semua Nilai
+            </button>
+          </div>
+
+          <!-- Tab 1: Input Nilai Mapel -->
+          <div id="tab-grades-input" class="tab-content-panel">
+            <form id="grade-form" class="grades-entry-form">
+              <div class="form-row">
+                <div class="input-group">
+                  <label for="grade-student-select">PILIH SISWA</label>
+                  <div class="input-wrapper">
+                    <i class="fas fa-user-graduate"></i>
+                    <select id="grade-student-select" required></select>
+                  </div>
+                </div>
+                
+                <div class="input-group">
+                  <label for="grade-subject-select">MATA PELAJARAN</label>
+                  <div class="input-wrapper">
+                    <i class="fas fa-book"></i>
+                    <select id="grade-subject-select" required>
+                      <option value="">-- Pilih Mapel --</option>
+                      <option value="matematika">Matematika</option>
+                      <option value="indonesia">Bahasa Indonesia</option>
+                      <option value="ipa">IPA / IPAS</option>
+                      <option value="agama">Pendidikan Agama</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+               <!-- Dynamic Assessment Inputs Container -->
+               <div id="main-grade-inputs-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; margin-top: 15px;">
+                 <!-- Dynamically populated fields -->
+               </div>
+
+               <div style="text-align: center; margin: 15px 0 5px 0;">
+                 <button type="button" id="btn-add-main-grade-component" class="btn btn-outline" style="font-size: 0.85rem; padding: 8px 12px; width: 100%; border: 1px dashed var(--primary); color: var(--primary); background: none; border-radius: var(--radius-md); cursor: pointer;">
+                   <i class="fas fa-plus-circle"></i> Tambah Komponen Nilai Baru (Tugas/Ulangan)
+                 </button>
+               </div>
+
+              <button type="submit" class="btn btn-primary" style="margin-top: 10px;">
+                <i class="fas fa-save"></i> Simpan Nilai Mata Pelajaran
+              </button>
+            </form>
+          </div>
+
+          <!-- Tab 2: Observasi Sikap & Karakter -->
+          <div id="tab-grades-character" class="tab-content-panel">
+            <form id="character-form" class="card">
+              <div class="input-group" style="max-width: 400px; margin-bottom: 20px;">
+                <label for="character-student-select">PILIH SISWA</label>
+                <div class="input-wrapper">
+                  <i class="fas fa-user-graduate"></i>
+                  <select id="character-student-select" required></select>
+                </div>
+              </div>
+
+              <div class="character-grid">
+                <!-- Spiritual Assessment -->
+                <div class="character-card">
+                  <h4 style="color:var(--primary); margin-bottom: 15px;"><i class="fas fa-pray"></i> Sikap Spiritual</h4>
+                  <div class="character-row">
+                    <span class="character-label">Ketaatan Beribadah</span>
+                    <select id="char-spiritual-ibadah" class="character-select">
+                      <option value="SB">Sangat Baik</option>
+                      <option value="B" selected>Baik</option>
+                      <option value="C">Cukup</option>
+                      <option value="PB">Perlu Bimbingan</option>
+                    </select>
+                  </div>
+                  <div class="character-row">
+                    <span class="character-label">Perilaku Bersyukur</span>
+                    <select id="char-spiritual-syukur" class="character-select">
+                      <option value="SB">Sangat Baik</option>
+                      <option value="B" selected>Baik</option>
+                      <option value="C">Cukup</option>
+                      <option value="PB">Perlu Bimbingan</option>
+                    </select>
+                  </div>
+                  <div class="input-group" style="margin-top: 15px;">
+                    <label for="char-spiritual-notes">Catatan Perkembangan Spiritual</label>
+                    <textarea id="char-spiritual-notes" rows="3" placeholder="Tulis deskripsi perkembangan sikap spiritual murid..." style="width: 100%; border: 1.5px solid var(--border-color); border-radius: var(--radius-md); padding:10px; outline:none; font-size: 0.9rem;"></textarea>
+                  </div>
+                </div>
+
+                <!-- Social Assessment -->
+                <div class="character-card">
+                  <h4 style="color:var(--primary); margin-bottom: 15px;"><i class="fas fa-users"></i> Sikap Sosial</h4>
+                  <div class="character-row">
+                    <span class="character-label">Kejujuran</span>
+                    <select id="char-social-jujur" class="character-select">
+                      <option value="SB">Sangat Baik</option>
+                      <option value="B" selected>Baik</option>
+                      <option value="C">Cukup</option>
+                      <option value="PB">Perlu Bimbingan</option>
+                    </select>
+                  </div>
+                  <div class="character-row">
+                    <span class="character-label">Kedisiplinan</span>
+                    <select id="char-social-disiplin" class="character-select">
+                      <option value="SB">Sangat Baik</option>
+                      <option value="B" selected>Baik</option>
+                      <option value="C">Cukup</option>
+                      <option value="PB">Perlu Bimbingan</option>
+                    </select>
+                  </div>
+                  <div class="character-row">
+                    <span class="character-label">Tanggung Jawab</span>
+                    <select id="char-social-tanggungjawab" class="character-select">
+                      <option value="SB">Sangat Baik</option>
+                      <option value="B" selected>Baik</option>
+                      <option value="C">Cukup</option>
+                      <option value="PB">Perlu Bimbingan</option>
+                    </select>
+                  </div>
+                  <div class="input-group" style="margin-top: 15px;">
+                    <label for="char-social-notes">Catatan Perkembangan Sosial</label>
+                    <textarea id="char-social-notes" rows="3" placeholder="Tulis deskripsi perilaku sosial murid..." style="width: 100%; border: 1.5px solid var(--border-color); border-radius: var(--radius-md); padding:10px; outline:none; font-size: 0.9rem;"></textarea>
+                  </div>
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i> Simpan Observasi Sikap
+              </button>
+            </form>
+          </div>
+
+          <!-- Tab 3: Rekap Nilai & Export -->
+          <div id="tab-grades-recap" class="tab-content-panel">
+            <div class="card" style="margin-bottom: 20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px;">
+              <div>
+                <h4 style="margin-bottom:5px;"><i class="fas fa-award"></i> Rekapitulasi Rata-Rata Nilai Murid</h4>
+                <p id="academic-curriculum-label" class="text-muted" style="font-size: 0.85rem;">Kurikulum Merdeka</p>
+              </div>
+              <button id="export-grades-btn" class="btn btn-success">
+                <i class="fas fa-file-excel"></i> Ekspor Excel (CSV)
+              </button>
+            </div>
+
+            <div class="table-wrapper">
+              <table class="table-custom">
+                <thead>
+                  <tr id="grades-recap-header-row">
+                    <!-- Dynamic Headers -->
+                  </tr>
+                </thead>
+                <tbody id="grades-recap-table-body">
+                  <!-- Loaded dynamically by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             PAGE 5: KEUANGAN KELAS (KAS & TABUNGAN)
+             ========================================== -->
+        <section id="finance" class="page-view">
+          <div class="tabs-container">
+            <button class="tab-btn active" data-tab="tab-finance-savings">Tabungan Murid</button>
+            <button class="tab-btn" data-tab="tab-finance-cash">Buku Kas Kelas</button>
+          </div>
+
+          <!-- Tab 1: Tabungan Murid -->
+          <div id="tab-finance-savings" class="tab-content-panel active">
+            <div class="split-layout">
+              <!-- Transaction form -->
+              <form id="saving-form" class="card">
+                <h4 style="color:var(--primary); margin-bottom: 15px;"><i class="fas fa-piggy-bank"></i> Transaksi Setor/Tarik</h4>
+                
+                <div class="input-group" style="margin-bottom: 12px;">
+                  <label for="saving-student-select">PILIH SISWA</label>
+                  <div class="input-wrapper">
+                    <i class="fas fa-user-graduate"></i>
+                    <select id="saving-student-select" required></select>
+                  </div>
+                </div>
+
+                <div class="input-group" style="margin-bottom: 12px;">
+                  <label for="saving-tx-type">JENIS TRANSAKSI</label>
+                  <div class="input-wrapper">
+                    <i class="fas fa-exchange-alt"></i>
+                    <select id="saving-tx-type" required>
+                      <option value="deposit">Setor Uang (Tabungan)</option>
+                      <option value="withdraw">Tarik Uang (Pengambilan)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="input-group" style="margin-bottom: 12px;">
+                  <label for="saving-amount">JUMLAH TRANSAKSI (Rp)</label>
+                  <div class="input-wrapper">
+                    <i class="fas fa-money-bill-wave"></i>
+                    <input type="number" id="saving-amount" min="100" placeholder="Contoh: 10000" required>
+                  </div>
+                </div>
+
+                <div class="input-group" style="margin-bottom: 15px;">
+                  <label for="saving-notes">KETERANGAN / CATATAN</label>
+                  <div class="input-wrapper">
+                    <i class="far fa-sticky-note"></i>
+                    <input type="text" id="saving-notes" placeholder="Contoh: Setoran minggu ke-3">
+                  </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                  <i class="fas fa-check-circle"></i> Proses Transaksi Tabungan
+                </button>
+              </form>
+
+              <!-- Recap table -->
+              <div class="table-wrapper">
+                <table class="table-custom">
+                  <thead>
+                    <tr>
+                      <th style="width: 50px;">No</th>
+                      <th>Nama Murid</th>
+                      <th>Saldo Tabungan</th>
+                      <th style="width: 100px;">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="savings-recap-table-body">
+                    <!-- Loaded dynamically by JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 2: Uang Kas Kelas -->
+          <div id="tab-finance-cash" class="tab-content-panel">
+            <div class="finance-header-card">
+              <div class="finance-header-info">
+                <h3>Saldo Akhir Kas Kelas</h3>
+                <p id="cash-balance-total">Rp 0</p>
+              </div>
+              <div class="finance-header-icon"><i class="fas fa-coins"></i></div>
+            </div>
+
+            <div class="split-layout">
+              <!-- Cash transaction Form -->
+              <form id="cash-form" class="card">
+                <h4 style="color:var(--primary); margin-bottom: 15px;"><i class="fas fa-plus-square"></i> Input Mutasi Uang Kas</h4>
+                
+                <div class="input-group" style="margin-bottom: 12px;">
+                  <label for="cash-tx-type">JENIS TRANSAKSI</label>
+                  <div class="input-wrapper">
+                    <i class="fas fa-exchange-alt"></i>
+                    <select id="cash-tx-type" required>
+                      <option value="in">Kas Masuk (+) (Iuran/Sumbangan)</option>
+                      <option value="out">Kas Keluar (-) (Belanja/Pembelian)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="input-group" style="margin-bottom: 12px;">
+                  <label for="cash-amount">NOMINAL (Rp)</label>
+                  <div class="input-wrapper">
+                    <i class="fas fa-money-bill-wave"></i>
+                    <input type="number" id="cash-amount" min="100" placeholder="Contoh: 15000" required>
+                  </div>
+                </div>
+
+                <div class="input-group" style="margin-bottom: 15px;">
+                  <label for="cash-notes">KETERANGAN / RINCIAN BELANJA</label>
+                  <div class="input-wrapper">
+                    <i class="far fa-sticky-note"></i>
+                    <input type="text" id="cash-notes" placeholder="Contoh: Beli spidol kelas & sapu" required>
+                  </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                  <i class="fas fa-save"></i> Simpan Transaksi Kas
+                </button>
+              </form>
+
+              <!-- Ledger -->
+              <div class="table-wrapper">
+                <table class="table-custom">
+                  <thead>
+                    <tr>
+                      <th>Tanggal</th>
+                      <th>Jenis</th>
+                      <th>Keterangan</th>
+                      <th>Jumlah</th>
+                      <th style="width: 50px;"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="cash-history-table-body">
+                    <!-- Loaded dynamically by JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             PAGE 6: JADWAL & AGENDA (SCHEDULE)
+             ========================================== -->
+        <section id="schedule" class="page-view">
+          <div class="tabs-container">
+            <button class="tab-btn active" data-tab="tab-schedule-lessons">Jadwal Pelajaran</button>
+            <button class="tab-btn" data-tab="tab-schedule-piket">Jadwal Piket</button>
+            <button class="tab-btn" data-tab="tab-schedule-calendar">Kalender Akademik</button>
+          </div>
+
+          <!-- Tab 1: Jadwal Pelajaran -->
+          <div id="tab-schedule-lessons" class="tab-content-panel active">
+            <div class="card" style="margin-bottom: 20px;">
+              <h4 style="color:var(--primary); margin-bottom:12px;"><i class="fas fa-plus-circle"></i> Tambah Jadwal Pelajaran</h4>
+              <form id="lesson-form" style="display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end;">
+                <div class="input-group" style="flex:1; min-width:130px;">
+                  <label for="lesson-day">Hari</label>
+                  <select id="lesson-day" required>
+                    <option value="senin">Senin</option>
+                    <option value="selasa">Selasa</option>
+                    <option value="rabu">Rabu</option>
+                    <option value="kamis">Kamis</option>
+                    <option value="jumat">Jumat</option>
+                    <option value="sabtu">Sabtu</option>
+                  </select>
+                </div>
+
+                <div class="input-group" style="width: 100px;">
+                  <label for="lesson-time-start">Jam Mulai</label>
+                  <input type="text" id="lesson-time-start" placeholder="07:00" required>
+                </div>
+                
+                <div class="input-group" style="width: 100px;">
+                  <label for="lesson-time-end">Jam Selesai</label>
+                  <input type="text" id="lesson-time-end" placeholder="08:30" required>
+                </div>
+
+                <div class="input-group" style="flex:2; min-width:150px;">
+                  <label for="lesson-subject">Mata Pelajaran</label>
+                  <input type="text" id="lesson-subject" placeholder="Matematika" required>
+                </div>
+
+                <div class="input-group" style="flex:1.5; min-width:130px;">
+                  <label for="lesson-teacher">Nama Guru Mapel</label>
+                  <input type="text" id="lesson-teacher" placeholder="Pak Doni / Wali Kelas" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="height: 45px;"><i class="fas fa-plus"></i></button>
+              </form>
+            </div>
+
+            <!-- Lessons Grid -->
+            <div class="schedule-grid">
+              <div class="schedule-day-card">
+                <div class="schedule-day-header">Senin</div>
+                <div id="lessons-senin" class="schedule-day-body"></div>
+              </div>
+              <div class="schedule-day-card">
+                <div class="schedule-day-header">Selasa</div>
+                <div id="lessons-selasa" class="schedule-day-body"></div>
+              </div>
+              <div class="schedule-day-card">
+                <div class="schedule-day-header">Rabu</div>
+                <div id="lessons-rabu" class="schedule-day-body"></div>
+              </div>
+              <div class="schedule-day-card">
+                <div class="schedule-day-header">Kamis</div>
+                <div id="lessons-kamis" class="schedule-day-body"></div>
+              </div>
+              <div class="schedule-day-card">
+                <div class="schedule-day-header">Jumat</div>
+                <div id="lessons-jumat" class="schedule-day-body"></div>
+              </div>
+              <div class="schedule-day-card">
+                <div class="schedule-day-header">Sabtu</div>
+                <div id="lessons-sabtu" class="schedule-day-body"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 2: Jadwal Piket Kebersihan -->
+          <div id="tab-schedule-piket" class="tab-content-panel">
+            <div class="split-layout">
+              <!-- Piket form -->
+              <form id="piket-form" class="card">
+                <h4 style="color:var(--primary); margin-bottom: 15px;"><i class="fas fa-edit"></i> Edit Anggota Piket</h4>
+                <div class="input-group" style="margin-bottom:15px;">
+                  <label for="piket-day">PILIH HARI PIKET</label>
+                  <select id="piket-day" required>
+                    <option value="">-- Pilih Hari --</option>
+                    <option value="senin">Senin</option>
+                    <option value="selasa">Selasa</option>
+                    <option value="rabu">Rabu</option>
+                    <option value="kamis">Kamis</option>
+                    <option value="jumat">Jumat</option>
+                    <option value="sabtu">Sabtu</option>
+                  </select>
+                </div>
+                
+                <label style="font-size:0.85rem; font-weight:600; margin-bottom: 8px; display:block;">PILIH ANGGOTA KELAS</label>
+                <div id="piket-students-checkboxes" class="no-scrollbar" style="max-height: 250px; overflow-y: auto; border:1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px; background-color: var(--bg-main); margin-bottom: 15px;">
+                  <!-- Checkbox lists populated dynamically -->
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                  <i class="fas fa-save"></i> Perbarui Anggota Piket
+                </button>
+              </form>
+
+              <!-- Display Piket Group -->
+              <div class="piket-grid">
+                <div class="piket-card">
+                  <div class="piket-card-title">Senin</div>
+                  <div id="piket-senin-list" class="piket-member-list"></div>
+                </div>
+                <div class="piket-card">
+                  <div class="piket-card-title">Selasa</div>
+                  <div id="piket-selasa-list" class="piket-member-list"></div>
+                </div>
+                <div class="piket-card">
+                  <div class="piket-card-title">Rabu</div>
+                  <div id="piket-rabu-list" class="piket-member-list"></div>
+                </div>
+                <div class="piket-card">
+                  <div class="piket-card-title">Kamis</div>
+                  <div id="piket-kamis-list" class="piket-member-list"></div>
+                </div>
+                <div class="piket-card">
+                  <div class="piket-card-title">Jumat</div>
+                  <div id="piket-jumat-list" class="piket-member-list"></div>
+                </div>
+                <div class="piket-card">
+                  <div class="piket-card-title">Sabtu</div>
+                  <div id="piket-sabtu-list" class="piket-member-list"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 3: Kalender Akademik -->
+          <div id="tab-schedule-calendar" class="tab-content-panel">
+            <div class="split-layout">
+              <!-- Event input -->
+              <form id="calendar-form" class="card">
+                <h4 style="color:var(--primary); margin-bottom: 15px;"><i class="fas fa-calendar-plus"></i> Tambah Agenda Sekolah</h4>
+                
+                <div class="input-group" style="margin-bottom: 12px;">
+                  <label for="cal-event-date">TANGGAL KEGIATAN</label>
+                  <input type="date" id="cal-event-date" required>
+                </div>
+
+                <div class="input-group" style="margin-bottom: 12px;">
+                  <label for="cal-event-title">NAMA KEGIATAN / HARI LIBUR</label>
+                  <input type="text" id="cal-event-title" placeholder="Contoh: Libur Idul Fitri" required>
+                </div>
+
+                <div class="input-group" style="margin-bottom: 15px;">
+                  <label for="cal-event-type">JENIS AGENDA</label>
+                  <select id="cal-event-type" required>
+                    <option value="event">Kegiatan Sekolah (Upacara, Persami, dll)</option>
+                    <option value="exam">Jadwal Ujian (STS, SAS, dll)</option>
+                    <option value="holiday">Hari Libur / Tanggal Merah</option>
+                  </select>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                  <i class="fas fa-calendar-check"></i> Simpan Agenda Akademik
+                </button>
+              </form>
+
+              <!-- Events feed -->
+              <div id="calendar-events-list" class="feed-list">
+                <!-- Loaded dynamically by JS -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             PAGE 7: BUKU PENGHUBUNG & KOMUNIKASI
+             ========================================== -->
+        <section id="communication" class="page-view">
+          <div class="tabs-container">
+            <button class="tab-btn active" data-tab="tab-comm-announcements">Papan Pengumuman</button>
+            <button class="tab-btn" data-tab="tab-comm-gallery">Galeri Kegiatan</button>
+            <button class="tab-btn" data-tab="tab-comm-reports">Laporan Singkat WA</button>
+          </div>
+
+          <!-- Tab 1: Papan Pengumuman -->
+          <div id="tab-comm-announcements" class="tab-content-panel active">
+            <div class="split-layout">
+              <!-- Announcement Input -->
+              <form id="announcement-form" class="card">
+                <h4 style="color:var(--primary); margin-bottom: 15px;"><i class="fas fa-edit"></i> Buat Pengumuman Baru</h4>
+                <div class="input-group" style="margin-bottom:12px;">
+                  <label for="ann-title">JUDUL INFO</label>
+                  <input type="text" id="ann-title" placeholder="Contoh: Pengumuman Rapat Wali Murid" required>
+                </div>
+                <div class="input-group" style="margin-bottom:15px;">
+                  <label for="ann-content">ISI INFO PENGUMUMAN</label>
+                  <textarea id="ann-content" rows="5" placeholder="Tulis instruksi lengkap, misalnya membawa peralatan, jam kumpul dll..." required style="width:100%; border:1.5px solid var(--border-color); border-radius: var(--radius-md); padding:10px; outline:none; font-size: 0.9rem;"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%;"><i class="fas fa-paper-plane"></i> Publikasikan Pengumuman</button>
+              </form>
+
+              <!-- Announcement list board -->
+              <div id="announcements-list-container" class="feed-list">
+                <!-- Loaded dynamically by JS -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 2: Galeri Kegiatan -->
+          <div id="tab-comm-gallery" class="tab-content-panel">
+            <div class="card" style="margin-bottom: 20px;">
+              <h4><i class="fas fa-images"></i> Galeri Dokumentasi Kegiatan Belajar</h4>
+              <p class="text-muted" style="font-size: 0.85rem;">Sebagai dokumentasi wali kelas untuk memperlihatkan keaktifan belajar siswa kepada wali murid.</p>
+            </div>
+            
+            <div id="gallery-list-container" class="gallery-grid">
+              <!-- Static simulations loaded by JS -->
+            </div>
+          </div>
+
+          <!-- Tab 3: Laporan Singkat via WhatsApp -->
+          <div id="tab-comm-reports" class="tab-content-panel">
+            <div class="card" style="max-width: 600px; margin: 0 auto;">
+              <h4 style="color:var(--primary); margin-bottom: 15px;"><i class="fab fa-whatsapp"></i> Broadcast WhatsApp Orang Tua</h4>
+              <p class="text-muted" style="font-size:0.85rem; margin-bottom: 20px;">
+                Fitur ini membantu mengirimkan laporan perkembangan murid secara langsung ke nomor WhatsApp orang tua terdaftar dengan template chat instan 1-klik.
+              </p>
+
+              <form id="broadcast-form">
+                <div class="input-group" style="margin-bottom:12px;">
+                  <label for="comm-student-select">PILIH SISWA</label>
+                  <div class="input-wrapper">
+                    <i class="fas fa-user-graduate"></i>
+                    <select id="comm-student-select" required></select>
+                  </div>
+                </div>
+
+                <div class="input-group" style="margin-bottom:12px;">
+                  <label for="broadcast-type-select">JENIS LAPORAN</label>
+                  <div class="input-wrapper">
+                    <i class="fas fa-clipboard-list"></i>
+                    <select id="broadcast-type-select">
+                      <option value="general">Informasi Perkembangan Belajar (Umum)</option>
+                      <option value="grades">Hasil Nilai Rapor Sementara</option>
+                      <option value="attendance">Laporan Rekap Absensi Murid</option>
+                      <option value="warning">Pemberitahuan Tugas/Ketidakhadiran (Darurat)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="input-group" style="margin-bottom:15px;">
+                  <label for="broadcast-text-template">PRATINJAU PESAN WHATSAPP</label>
+                  <textarea id="broadcast-text-template" rows="8" style="width:100%; border:1.5px solid var(--border-color); border-radius: var(--radius-md); padding:10px; outline:none; font-size: 0.9rem; font-family:var(--font-body);" required></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-success" style="width: 100%; font-size: 1rem; padding: 12px;">
+                  <i class="fab fa-whatsapp"></i> Kirim Pesan ke Orang Tua
+                </button>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             PAGE 8: PENGATURAN (SETTINGS)
+             ========================================== -->
+        <section id="settings" class="page-view">
+          <div class="card-grid">
+            
+            <!-- Class Details Form -->
+            <form id="class-settings-form" class="card">
+              <h4 style="color:var(--primary); margin-bottom:15px;"><i class="fas fa-school"></i> Profil Sekolah & Kelas</h4>
+              
+              <div class="input-group" style="margin-bottom:12px;">
+                <label for="settings-classname">Nama Kelas</label>
+                <input type="text" id="settings-classname" required>
+              </div>
+
+              <div class="input-group" style="margin-bottom:12px;">
+                <label for="settings-schoolname">Nama Sekolah</label>
+                <input type="text" id="settings-schoolname" required>
+              </div>
+
+              <div class="input-group" style="margin-bottom:12px;">
+                <label for="settings-curriculum">Kurikulum Pembelajaran</label>
+                <select id="settings-curriculum" required>
+                  <option value="merdeka">Kurikulum Merdeka</option>
+                  <option value="k13">Kurikulum 2013 (K13)</option>
+                </select>
+              </div>
+
+              <div class="input-group" style="margin-bottom:15px;">
+                <label for="settings-year">Tahun Pelajaran</label>
+                <input type="text" id="settings-year" required>
+              </div>
+
+              <div class="input-group" style="margin-bottom:15px;">
+                <label for="settings-kkm">KKM / KKTP (Batas Ketuntasan)</label>
+                <input type="number" id="settings-kkm" min="0" max="100" step="1" placeholder="Contoh: 70" required>
+              </div>
+
+              <button type="submit" class="btn btn-primary" style="width: 100%;"><i class="fas fa-save"></i> Simpan Profil Kelas</button>
+            </form>
+
+            <!-- Manage Subjects Card in Settings -->
+            <div class="card">
+              <h4 style="color:var(--primary); margin-bottom:15px;"><i class="fas fa-book-open"></i> Mata Pelajaran Kelas</h4>
+              <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 12px;">Mata pelajaran default tidak dapat dihapus.</p>
+              <div style="margin-bottom: 15px; max-height: 150px; overflow-y: auto; padding-right: 5px;">
+                <ul id="settings-subjects-list" style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px;">
+                  <!-- Dynamically loaded list of subjects -->
+                </ul>
+              </div>
+              <form id="settings-add-subject-form" style="display: flex; gap: 8px;">
+                <input type="text" id="settings-new-subject-name" placeholder="Nama Mapel Baru..." required style="flex: 1; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-color); background-color: var(--bg-main); color: var(--text-main);">
+                <button type="submit" class="btn btn-primary" style="padding: 8px 16px;"><i class="fas fa-plus"></i></button>
+              </form>
+            </div>
+
+            <!-- Security setting form -->
+            <form id="password-settings-form" class="card">
+              <h4 style="color:var(--primary); margin-bottom:15px;"><i class="fas fa-shield-alt"></i> Keamanan Wali Kelas</h4>
+              
+              <div class="input-group" style="margin-bottom:12px;">
+                <label for="settings-old-pass">Kata Sandi Lama</label>
+                <input type="password" id="settings-old-pass" required>
+              </div>
+
+              <div class="input-group" style="margin-bottom:15px;">
+                <label for="settings-new-pass">Kata Sandi Baru</label>
+                <input type="password" id="settings-new-pass" required>
+              </div>
+
+              <button type="submit" class="btn btn-primary" style="width: 100%;"><i class="fas fa-key"></i> Perbarui Sandi Keamanan</button>
+            </form>
+          </div>
+
+          <!-- Backup, Restore, and Clean buttons -->
+          <div class="card" style="margin-top: 20px;">
+            <h4 style="color:var(--primary); margin-bottom: 15px;"><i class="fas fa-hdd"></i> Cadangan Database Lokal (Offline-first)</h4>
+            <p class="text-muted" style="font-size:0.85rem; margin-bottom:20px;">
+              Seluruh data murid, nilai, presensi, kas dan tabungan disimpan di browser internal Anda. Harap lakukan pencadangan berkala untuk menghindari kehilangan data ketika browser di-clear/dihapus datanya.
+            </p>
+
+            <div style="display:flex; flex-wrap:wrap; gap:12px;">
+              <button id="backup-btn" class="btn btn-primary">
+                <i class="fas fa-download"></i> Ekspor Backup Data (.json)
+              </button>
+              
+              <button id="restore-btn" class="btn btn-secondary">
+                <i class="fas fa-upload"></i> Impor Backup Data (.json)
+              </button>
+              <input type="file" id="restore-file-input" accept=".json" style="display:none;">
+
+              <button id="load-demo-btn" class="btn btn-warning">
+                <i class="fas fa-database"></i> Muat Data Demo Sekolah
+              </button>
+              
+              <button id="reset-data-btn" class="btn btn-danger">
+                <i class="fas fa-trash-alt"></i> Hapus Seluruh Data Kelas
+              </button>
+            </div>
+          </div>
+        </section>
+
+      </main>
+
+      <!-- MOBILE BOTTOM NAVIGATION MENU -->
+      <nav class="bottom-nav">
+        <a href="#dashboard" class="bottom-nav-item active">
+          <i class="fas fa-columns"></i>
+          <span>Home</span>
+        </a>
+        <a href="#students" class="bottom-nav-item">
+          <i class="fas fa-user-graduate"></i>
+          <span>Murid</span>
+        </a>
+        <a href="#attendance" class="bottom-nav-item">
+          <i class="fas fa-calendar-check"></i>
+          <span>Presensi</span>
+        </a>
+        <a href="#grades" class="bottom-nav-item">
+          <i class="fas fa-award"></i>
+          <span>Nilai</span>
+        </a>
+        <a href="#settings" class="bottom-nav-item">
+          <i class="fas fa-cog"></i>
+          <span>Setelan</span>
+        </a>
+      </nav>
+
+    </div>
+  </div>
+
+  <!-- ==========================================
+       3. SYSTEM MODALS OVERLAY SYSTEM
+       ========================================== -->
+  
+  <!-- MODAL: ADD / EDIT STUDENT FORM -->
+  <div id="modal-student-form" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="student-form-title" class="modal-title">Tambah Murid Baru</h3>
+        <button class="modal-close" aria-label="Tutup"><i class="fas fa-times"></i></button>
+      </div>
+      <form id="student-form">
+        <div class="modal-body">
+          <input type="hidden" id="student-id">
+          
+          <h4 style="color:var(--primary); font-size:0.9rem; border-bottom:1.5px solid var(--border-color); padding-bottom:5px; margin-bottom:12px;">Informasi Utama (Wajib)</h4>
+          
+          <div class="form-row">
+            <div class="input-group">
+              <label for="student-name">Nama Lengkap Murid</label>
+              <input type="text" id="student-name" required placeholder="Contoh: Ahmad Syarif">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="input-group">
+              <label for="student-gender">Jenis Kelamin</label>
+              <select id="student-gender" required>
+                <option value="L">Laki-laki (L)</option>
+                <option value="P">Perempuan (P)</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <label for="student-parent-phone">Nomor WhatsApp Wali (Penting)</label>
+              <input type="text" id="student-parent-phone" required placeholder="Contoh: 08123456789">
+            </div>
+          </div>
+
+          <!-- COLLAPSIBLE ACCORDION FOR OPTIONAL FIELDS -->
+          <details class="form-accordion" style="margin-top: 15px;">
+            <summary class="form-accordion-title"><i class="fas fa-sliders-h" style="margin-right: 5px;"></i> Tampilkan Informasi Tambahan (Opsional)</summary>
+            <div class="form-accordion-content" style="padding-top: 15px; display: flex; flex-direction: column; gap: 12px; background-color: #fff;">
+              
+              <div class="form-row">
+                <div class="input-group">
+                  <label for="student-nis">Nomor Induk Siswa (NIS)</label>
+                  <input type="text" id="student-nis" placeholder="Contoh: 220101">
+                </div>
+                <div class="input-group">
+                  <label for="student-nisn">NIS Nasional (NISN)</label>
+                  <input type="text" id="student-nisn" placeholder="Contoh: 0098765432">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="input-group">
+                  <label for="student-religion">Agama</label>
+                  <select id="student-religion">
+                    <option value="Islam">Islam</option>
+                    <option value="Kristen">Kristen</option>
+                    <option value="Katolik">Katolik</option>
+                    <option value="Hindu">Hindu</option>
+                    <option value="Buddha">Buddha</option>
+                    <option value="Konghucu">Konghucu</option>
+                  </select>
+                </div>
+                <div class="input-group">
+                  <label for="student-pob">Tempat Lahir</label>
+                  <input type="text" id="student-pob" placeholder="Jakarta">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="input-group">
+                  <label for="student-dob">Tanggal Lahir</label>
+                  <input type="date" id="student-dob">
+                </div>
+                <div class="input-group">
+                  <label for="student-address">Alamat Rumah Murid</label>
+                  <input type="text" id="student-address" placeholder="Jl. Melati IV No. 89">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="input-group">
+                  <label for="student-parent-name">Nama Ayah / Ibu / Wali</label>
+                  <input type="text" id="student-parent-name" placeholder="Nama Ayah/Ibu">
+                </div>
+                <div class="input-group">
+                  <label for="student-parent-job">Pekerjaan Wali</label>
+                  <input type="text" id="student-parent-job" placeholder="Pekerjaan">
+                </div>
+              </div>
+
+              <div class="input-group">
+                <label for="student-parent-address">Alamat Orang Tua (Kosongkan jika sama)</label>
+                <input type="text" id="student-parent-address" placeholder="Tulis jika beda dengan alamat siswa">
+              </div>
+
+              <div class="input-group">
+                <label for="student-notes">Catatan Khusus Bimbingan (Alergi, Penyakit bawaan, kesulitan belajar dll)</label>
+                <textarea id="student-notes" rows="3" placeholder="Contoh: Alergi udang. Butuh pendampingan khusus mengeja membaca." style="width: 100%; border: 1.5px solid var(--border-color); border-radius: var(--radius-md); padding:10px; outline:none; font-size: 0.9rem;"></textarea>
+              </div>
+
+            </div>
+          </details>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary modal-close">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan Murid</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: STUDENT PROFILE DETAILED VIEW -->
+  <div id="modal-student-detail" class="modal-overlay">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Buku Induk Murid</h3>
+        <button class="modal-close" aria-label="Tutup"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body" id="student-detail-content">
+        <!-- Loaded dynamically by JS -->
+      </div>
+      <div class="modal-footer" style="justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+        <button id="delete-student-btn" class="btn btn-danger"><i class="fas fa-trash-alt"></i> Hapus</button>
+        <div style="display:flex; gap:8px;">
+          <button id="print-student-btn" type="button" class="btn btn-secondary"><i class="fas fa-print"></i> Cetak Profil</button>
+          <button type="button" class="btn btn-primary modal-close">Tutup</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: STUDENT SAVINGS TRANSACTION HISTORY -->
+  <div id="modal-savings-history" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="savings-history-title" class="modal-title">Riwayat Tabungan</h3>
+        <button class="modal-close" aria-label="Tutup"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body" id="savings-history-modal-body" style="padding-top: 15px;">
+        <!-- Loaded dynamically by JS -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary modal-close">Tutup Riwayat</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: QUICK INPUT GRADE -->
+  <div id="modal-quick-grade" class="modal-overlay">
+    <div class="modal-content" style="max-width: 450px;">
+      <div class="modal-header">
+        <h3 class="modal-title"><i class="fas fa-award"></i> Input Nilai Cepat</h3>
+        <button class="modal-close" aria-label="Tutup"><i class="fas fa-times"></i></button>
+      </div>
+      <form id="quick-grade-form">
+        <div class="modal-body">
+          <input type="hidden" id="quick-grade-student-id">
+          
+          <div class="input-group" style="margin-bottom: 12px;">
+            <label>NAMA SISWA</label>
+            <div id="quick-grade-student-name" style="font-weight: 700; font-size: 1.1rem; color: var(--primary); padding: 8px 12px; background-color: var(--primary-light); border-radius: var(--radius-md);"></div>
+          </div>
+
+          <div class="input-group" style="margin-bottom: 12px;">
+            <label for="quick-grade-subject">MATA PELAJARAN</label>
+            <div class="input-wrapper">
+              <i class="fas fa-book"></i>
+              <select id="quick-grade-subject" required>
+                <option value="matematika">Matematika</option>
+                <option value="indonesia">Bahasa Indonesia</option>
+                <option value="ipa">IPA / IPAS</option>
+                <option value="agama">Pendidikan Agama</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Dynamic Assessment Inputs Container -->
+          <div id="quick-grade-inputs-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; margin-top: 15px;">
+            <!-- Dynamically populated fields -->
+          </div>
+
+          <div style="text-align: center; margin: 15px 0 5px 0;">
+            <button type="button" id="btn-add-quick-grade-component" class="btn btn-outline" style="font-size: 0.85rem; padding: 6px 12px; width: 100%; border: 1px dashed var(--primary); color: var(--primary); background: none; border-radius: var(--radius-md); cursor: pointer;">
+              <i class="fas fa-plus-circle"></i> Tambah Komponen Nilai Baru (Tugas/Ulangan)
+            </button>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary modal-close">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan Nilai</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: QUICK SAVINGS TRANSACTION -->
+  <div id="modal-quick-saving" class="modal-overlay">
+    <div class="modal-content" style="max-width: 450px;">
+      <div class="modal-header">
+        <h3 class="modal-title"><i class="fas fa-piggy-bank"></i> Transaksi Tabungan</h3>
+        <button class="modal-close" aria-label="Tutup"><i class="fas fa-times"></i></button>
+      </div>
+      <form id="quick-saving-form">
+        <div class="modal-body">
+          <input type="hidden" id="quick-saving-student-id">
+          
+          <div class="input-group" style="margin-bottom: 12px;">
+            <label>NAMA SISWA</label>
+            <div id="quick-saving-student-name" style="font-weight: 700; font-size: 1.1rem; color: var(--primary); padding: 8px 12px; background-color: var(--primary-light); border-radius: var(--radius-md);"></div>
+          </div>
+
+          <div class="input-group" style="margin-bottom: 12px;">
+            <label>SALDO SAAT INI</label>
+            <div id="quick-saving-current-balance" style="font-weight: 700; font-size: 1.1rem; color: var(--success); padding: 8px 12px; background-color: var(--success-light); border-radius: var(--radius-md);"></div>
+          </div>
+
+          <div class="input-group" style="margin-bottom: 12px;">
+            <label for="quick-saving-type">JENIS TRANSAKSI</label>
+            <div class="input-wrapper">
+              <i class="fas fa-exchange-alt"></i>
+              <select id="quick-saving-type" required>
+                <option value="deposit">Setor Uang (Tabungan)</option>
+                <option value="withdraw">Tarik Uang (Pengambilan)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="input-group" style="margin-bottom: 12px;">
+            <label for="quick-saving-amount">NOMINAL TRANSAKSI (Rp)</label>
+            <div class="input-wrapper">
+              <i class="fas fa-money-bill-wave"></i>
+              <input type="number" id="quick-saving-amount" min="100" placeholder="Contoh: 10000" required>
+            </div>
+          </div>
+
+          <div class="input-group" style="margin-bottom: 12px;">
+            <label for="quick-saving-notes">KETERANGAN / CATATAN</label>
+            <div class="input-wrapper">
+              <i class="far fa-sticky-note"></i>
+              <input type="text" id="quick-saving-notes" placeholder="Contoh: Tabungan mingguan">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary modal-close">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan Transaksi</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <!-- MODAL: TAMBAH MATA PELAJARAN -->
+  <div id="modal-add-subject" class="modal-overlay">
+    <div class="modal-content" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3><i class="fas fa-book"></i> Tambah Mata Pelajaran</h3>
+        <button class="close-modal-btn modal-close">&times;</button>
+      </div>
+      <form id="add-subject-form">
+        <input type="hidden" id="add-subject-trigger-select" value="">
+        <div class="modal-body">
+          <div class="input-group" style="margin-bottom: 15px;">
+            <label for="new-subject-name">NAMA MATA PELAJARAN</label>
+            <div class="input-wrapper">
+              <i class="fas fa-bookmark"></i>
+              <input type="text" id="new-subject-name" placeholder="Contoh: Seni Musik, B. Jawa..." required>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary modal-close">Batal</button>
+          <button type="submit" class="btn btn-primary">Tambah Mapel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: EDIT MATA PELAJARAN -->
+  <div id="modal-edit-subject" class="modal-overlay">
+    <div class="modal-content" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3 class="modal-title"><i class="fas fa-edit"></i> Ubah Mata Pelajaran</h3>
+        <button class="modal-close" aria-label="Tutup"><i class="fas fa-times"></i></button>
+      </div>
+      <form id="edit-subject-form">
+        <input type="hidden" id="edit-subject-id" value="">
+        <div class="modal-body">
+          <div class="input-group" style="margin-bottom: 15px;">
+            <label for="edit-subject-name">NAMA MATA PELAJARAN</label>
+            <div class="input-wrapper">
+              <i class="fas fa-bookmark"></i>
+              <input type="text" id="edit-subject-name" placeholder="Nama mata pelajaran" required>
+            </div>
+          </div>
+
+          <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:8px;">BOBOT PENILAIAN (%)</label>
+          <div class="form-row">
+            <div class="input-group">
+              <label for="edit-weight-tugas" style="font-size:0.8rem;">Tugas</label>
+              <input type="number" id="edit-weight-tugas" class="edit-weight-input" min="0" max="100" step="1" style="width:100%; padding:8px 12px; border-radius:var(--radius-md); border:1.5px solid var(--border-color); background:var(--bg-main); color:var(--text-main);">
+            </div>
+            <div class="input-group">
+              <label for="edit-weight-uh" style="font-size:0.8rem;">Ulangan Harian</label>
+              <input type="number" id="edit-weight-uh" class="edit-weight-input" min="0" max="100" step="1" style="width:100%; padding:8px 12px; border-radius:var(--radius-md); border:1.5px solid var(--border-color); background:var(--bg-main); color:var(--text-main);">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="input-group">
+              <label for="edit-weight-uts" style="font-size:0.8rem;">UTS / STS</label>
+              <input type="number" id="edit-weight-uts" class="edit-weight-input" min="0" max="100" step="1" style="width:100%; padding:8px 12px; border-radius:var(--radius-md); border:1.5px solid var(--border-color); background:var(--bg-main); color:var(--text-main);">
+            </div>
+            <div class="input-group">
+              <label for="edit-weight-uas" style="font-size:0.8rem;">UAS / SAS</label>
+              <input type="number" id="edit-weight-uas" class="edit-weight-input" min="0" max="100" step="1" style="width:100%; padding:8px 12px; border-radius:var(--radius-md); border:1.5px solid var(--border-color); background:var(--bg-main); color:var(--text-main);">
+            </div>
+          </div>
+          <p id="edit-weight-total" class="text-muted" style="font-size:0.8rem; margin-top:6px;"></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary modal-close">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan Perubahan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: KELOLA KOMPONEN NILAI (kategori + bobot) -->
+  <div id="modal-assessment-component" class="modal-overlay">
+    <div class="modal-content" style="max-width: 420px;">
+      <div class="modal-header">
+        <h3 class="modal-title"><i class="fas fa-list-check"></i> Komponen Nilai Baru</h3>
+        <button class="modal-close" aria-label="Tutup"><i class="fas fa-times"></i></button>
+      </div>
+      <form id="assessment-component-form">
+        <input type="hidden" id="assessment-subject-id" value="">
+        <input type="hidden" id="assessment-return-prefix" value="">
+        <div class="modal-body">
+          <div class="input-group" style="margin-bottom: 12px;">
+            <label for="assessment-comp-category">KATEGORI</label>
+            <div class="input-wrapper">
+              <i class="fas fa-layer-group"></i>
+              <select id="assessment-comp-category">
+                <option value="tugas">Tugas</option>
+                <option value="uh">Ulangan Harian</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-group" style="margin-bottom: 8px;">
+            <label for="assessment-comp-name">NAMA KOMPONEN</label>
+            <div class="input-wrapper">
+              <i class="fas fa-pen"></i>
+              <input type="text" id="assessment-comp-name" placeholder="Contoh: Tugas 2" required>
+            </div>
+          </div>
+          <p class="text-muted" style="font-size: 0.8rem; margin-top: 8px;">UTS &amp; UAS hanya satu per mapel, jadi tidak dapat ditambah di sini. Bobot tiap kategori diatur lewat tombol <strong>Edit</strong> mata pelajaran di Pengaturan.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary modal-close">Batal</button>
+          <button type="submit" class="btn btn-primary">Tambah Komponen</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: KONFIRMASI AKSI (reusable) -->
+  <div id="modal-confirm" class="modal-overlay">
+    <div class="modal-content" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="confirm-title"><i class="fas fa-triangle-exclamation"></i> Konfirmasi</h3>
+        <button class="modal-close" aria-label="Tutup"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <div id="confirm-message" style="font-size: 0.92rem; line-height: 1.5;"></div>
+        <div id="confirm-summary" style="margin-top: 12px;"></div>
+        <div id="confirm-require-wrap" class="input-group" style="margin-top: 15px; display: none;">
+          <label id="confirm-require-label" style="font-size: 0.85rem;"></label>
+          <input type="text" id="confirm-require-input" autocomplete="off" placeholder="" style="width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1.5px solid var(--border-color); background: var(--bg-main); color: var(--text-main);">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary modal-close">Batal</button>
+        <button type="button" id="confirm-action-btn" class="btn btn-danger">Hapus</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Supabase SDK CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Core Stores & Logic scripts -->
+  <script src="js/store.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
