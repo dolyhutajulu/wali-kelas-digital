@@ -670,7 +670,7 @@ class Store {
     this.saveState();
   }
 
-  updateClassSettings(className, schoolName, curriculum, academicYear, kkm) {
+  updateClassSettings(className, schoolName, curriculum, academicYear, kkm, semester) {
     this.state.settings.className = className;
     this.state.settings.schoolName = schoolName;
     this.state.settings.curriculum = curriculum;
@@ -678,6 +678,9 @@ class Store {
     if (kkm !== undefined) {
       const parsed = parseFloat(kkm);
       this.state.settings.kkm = isNaN(parsed) ? DEFAULT_KKM : parsed;
+    }
+    if (semester !== undefined) {
+      this.state.settings.semester = parseInt(semester) || 1;
     }
     this.saveState();
   }
@@ -766,18 +769,18 @@ class Store {
   // Custom components are merged on top of the core defaults so every subject
   // always has at least Tugas/Ulangan/UTS/UAS.
   getSubjectAssessments(subjectId) {
-    const defaults = JSON.parse(JSON.stringify(DEFAULT_ASSESSMENTS));
-    const subject = (this.state.settings.subjects || []).find(s => s.id === subjectId);
-    if (!subject || !Array.isArray(subject.assessments) || subject.assessments.length === 0) {
-      return defaults;
-    }
-    // Normalize stored assessments (older data may use legacy categories).
-    return subject.assessments.map(a => ({
-      id: a.id,
-      name: a.name,
-      category: normalizeAssessmentCategory(a),
-      core: DEFAULT_ASSESSMENT_IDS.includes(a.id)
-    }));
+    const semester = this.state.settings.semester || 1;
+    const prefix = `s${semester}_`;
+    return [
+      { id: `${prefix}ph1`, name: 'Penilaian Harian 1 (PH1)', category: 'uh', core: true },
+      { id: `${prefix}re1`, name: 'Remedial PH1 (Re1)', category: 'uh', core: true },
+      { id: `${prefix}ph2`, name: 'Penilaian Harian 2 (PH2)', category: 'uh', core: true },
+      { id: `${prefix}re2`, name: 'Remedial PH2 (Re2)', category: 'uh', core: true },
+      { id: `${prefix}ph3`, name: 'Penilaian Harian 3 (PH3)', category: 'uh', core: true },
+      { id: `${prefix}re3`, name: 'Remedial PH3 (Re3)', category: 'uh', core: true },
+      { id: `${prefix}sas`, name: 'Sumatif Akhir Semester (SAS)', category: 'uas', core: true },
+      { id: `${prefix}resas`, name: 'Remedial SAS (ReSAS)', category: 'uas', core: true }
+    ];
   }
 
   // Per-subject category weights (percentages). Falls back to defaults.
@@ -1105,6 +1108,18 @@ class Store {
   // Only categories that have an entered value contribute (weights renormalize).
   // Returns null when nothing has been graded yet.
   getSubjectAverage(studentId, subjectId) {
+    const scores = (this.state.grades[studentId] || {})[subjectId] || {};
+    
+    // Check if there are any spreadsheet keys (e.g. starting with s1_ or s2_)
+    const keys = Object.keys(scores);
+    const hasSpreadsheetKeys = keys.some(k => k.startsWith('s1_') || k.startsWith('s2_'));
+    
+    if (hasSpreadsheetKeys) {
+      const semester = this.state.settings.semester || 1;
+      return this.getSubjectSemesterAverage(studentId, subjectId, semester);
+    }
+    
+    // Fallback to legacy calculation
     const cats = this.getSubjectCategoryAverages(studentId, subjectId);
     const weights = this.getCategoryWeights(subjectId);
     let weightedSum = 0;
@@ -1120,6 +1135,50 @@ class Store {
     });
     if (weightTotal === 0) return null;
     return Math.round(weightedSum / weightTotal);
+  }
+
+  getSubjectSemesterAverage(studentId, subjectId, semester) {
+    const scores = (this.state.grades[studentId] || {})[subjectId] || {};
+    const prefix = `s${semester}_`;
+    
+    // 1. Calculate RATA-RATA TA
+    const phSlots = [];
+    for (let i = 1; i <= 3; i++) {
+      const phVal = scores[`${prefix}ph${i}`];
+      const reVal = scores[`${prefix}re${i}`];
+      const hasPh = phVal !== undefined && phVal !== null && phVal !== '';
+      const hasRe = reVal !== undefined && reVal !== null && reVal !== '';
+      
+      if (hasPh || hasRe) {
+        const ph = hasPh ? parseFloat(phVal) : 0;
+        const re = hasRe ? parseFloat(reVal) : 0;
+        phSlots.push(Math.max(ph, re));
+      }
+    }
+    
+    const rataTA = phSlots.length > 0 
+      ? phSlots.reduce((a, b) => a + b, 0) / phSlots.length 
+      : null;
+      
+    // 2. Get SAS / ReSAS
+    const sasVal = scores[`${prefix}sas`];
+    const resasVal = scores[`${prefix}resas`];
+    const hasSas = sasVal !== undefined && sasVal !== null && sasVal !== '';
+    const hasReSas = resasVal !== undefined && resasVal !== null && resasVal !== '';
+    
+    const sasMax = (hasSas || hasReSas)
+      ? Math.max(hasSas ? parseFloat(sasVal) : 0, hasReSas ? parseFloat(resasVal) : 0)
+      : null;
+      
+    // 3. Compute NILAI RAPORT
+    if (rataTA !== null && sasMax !== null) {
+      return Math.round(0.6 * rataTA + 0.4 * sasMax);
+    } else if (rataTA !== null) {
+      return Math.round(rataTA);
+    } else if (sasMax !== null) {
+      return Math.round(sasMax);
+    }
+    return null;
   }
 
   // Overall average across CURRENT subjects only (ignores orphaned data).

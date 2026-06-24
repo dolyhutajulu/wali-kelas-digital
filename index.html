@@ -316,39 +316,35 @@
             <button class="tab-btn" data-tab="tab-grades-recap">Tabel Rekap Nilai</button>
           </div>
 
-          <!-- Tab 0: Input Nilai Grid Sekelas -->
+          <!-- Tab 0: Input Nilai Grid Sekelas (Spreadsheet Style) -->
           <div id="tab-grades-grid" class="tab-content-panel active">
-            <div class="card" style="margin-bottom: 15px;">
-              <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 12px;">
-                <i class="fas fa-bolt"></i> Isi nilai satu mata pelajaran untuk <strong>seluruh siswa sekaligus</strong>. Kolom rata-rata dihitung otomatis berbobot. Sel di bawah KKM ditandai merah.
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+              <p class="text-muted" style="font-size: 0.85rem; margin:0;">
+                <i class="fas fa-info-circle"></i> Klik sel untuk mengedit nilai langsung. Perubahan disimpan otomatis. Sel di bawah KKM akan berwarna merah.
               </p>
-              <div class="form-row" style="align-items: flex-end;">
-                <div class="input-group" style="margin-bottom: 0;">
-                  <label for="grade-grid-subject">MATA PELAJARAN</label>
-                  <div class="input-wrapper">
-                    <i class="fas fa-book"></i>
-                    <select id="grade-grid-subject"></select>
-                  </div>
-                </div>
-                <button type="button" id="btn-add-grid-component" class="btn btn-outline" style="border: 1px dashed var(--primary); color: var(--primary); background: none;">
-                  <i class="fas fa-plus-circle"></i> Tambah Komponen
-                </button>
-                <button type="button" id="btn-clear-subject-grades" class="btn btn-outline" style="border: 1px dashed var(--danger); color: var(--danger); background: none;">
-                  <i class="fas fa-eraser"></i> Kosongkan Nilai Mapel Ini
+              <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                <span id="grades-autosave-indicator" class="text-muted" style="font-size:0.8rem; display:inline-flex; align-items:center; gap:4px; opacity:0.85; transition: opacity 0.3s ease;">
+                  <i class="fas fa-check-circle" style="color:var(--success);"></i> Semua perubahan disimpan otomatis
+                </span>
+                <button type="button" id="btn-clear-subject-grades-spreadsheet" class="btn btn-outline" style="border: 1px dashed var(--danger); color: var(--danger); background: none; font-size: 0.8rem; padding: 5px 10px; border-radius: var(--radius-md);">
+                  <i class="fas fa-eraser"></i> Kosongkan Mapel
                 </button>
               </div>
             </div>
 
-            <div class="table-wrapper">
-              <table class="table-custom" id="grade-grid-table">
-                <thead><tr id="grade-grid-header-row"></tr></thead>
+            <!-- Subject tabs representing sheets in Google Sheets -->
+            <div class="spreadsheet-tabs" id="spreadsheet-subject-tabs" style="margin-bottom: 0;">
+              <!-- Dynamically populated subject tabs -->
+            </div>
+
+            <div class="table-wrapper" style="border: 1px solid var(--border-color); border-top: none; border-bottom-left-radius: var(--radius-md); border-bottom-right-radius: var(--radius-md); background: var(--bg-card); overflow-x: auto; max-height: 65vh;">
+              <table class="table-custom" id="grade-grid-table" style="margin-bottom:0; font-size:0.82rem; border-collapse: collapse; min-width: 1800px;">
+                <thead>
+                  <!-- We will construct two-row headers: Semester 1 & Semester 2 -->
+                </thead>
                 <tbody id="grade-grid-body"></tbody>
               </table>
             </div>
-
-            <button type="button" id="btn-save-grade-grid" class="btn btn-primary" style="margin-top: 15px;">
-              <i class="fas fa-save"></i> Simpan Semua Nilai
-            </button>
           </div>
 
           <!-- Tab 1: Input Nilai Mapel -->
@@ -383,11 +379,7 @@
                  <!-- Dynamically populated fields -->
                </div>
 
-               <div style="text-align: center; margin: 15px 0 5px 0;">
-                 <button type="button" id="btn-add-main-grade-component" class="btn btn-outline" style="font-size: 0.85rem; padding: 8px 12px; width: 100%; border: 1px dashed var(--primary); color: var(--primary); background: none; border-radius: var(--radius-md); cursor: pointer;">
-                   <i class="fas fa-plus-circle"></i> Tambah Komponen Nilai Baru (Tugas/Ulangan)
-                 </button>
-               </div>
+
 
               <button type="submit" class="btn btn-primary" style="margin-top: 10px;">
                 <i class="fas fa-save"></i> Simpan Nilai Mata Pelajaran
@@ -945,6 +937,14 @@
               <div class="input-group" style="margin-bottom:15px;">
                 <label for="settings-year">Tahun Pelajaran</label>
                 <input type="text" id="settings-year" required>
+              </div>
+
+              <div class="input-group" style="margin-bottom:15px;">
+                <label for="settings-semester">Semester Aktif</label>
+                <select id="settings-semester" required>
+                  <option value="1">Semester 1 (Ganjil)</option>
+                  <option value="2">Semester 2 (Genap)</option>
+                </select>
               </div>
 
               <div class="input-group" style="margin-bottom:15px;">
