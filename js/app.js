@@ -282,22 +282,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const totalStudents = store.state.students.length;
     document.getElementById('dash-stat-students').innerText = totalStudents;
 
-    // Today's attendance percentage
+    // Today's attendance percentage or Holiday status
     const todayStr = new Date().toISOString().split('T')[0];
     const todayLogs = store.getAttendance(todayStr);
-    let presentCount = 0;
-    
-    Object.values(todayLogs).forEach(status => {
-      if (status === 'H') presentCount++;
-    });
 
-    const attPercentage = totalStudents > 0 
-      ? Math.round((presentCount / totalStudents) * 100) 
-      : 100;
+    if (todayLogs.isHoliday) {
+      document.getElementById('dash-stat-attendance').innerText = `Libur (${todayLogs.holidayName})`;
+    } else {
+      let presentCount = 0;
+      Object.keys(todayLogs).forEach(key => {
+        if (key !== 'isHoliday' && key !== 'holidayName' && todayLogs[key] === 'H') {
+          presentCount++;
+        }
+      });
 
-    document.getElementById('dash-stat-attendance').innerText = totalStudents > 0
-      ? `${presentCount}/${totalStudents} (${attPercentage}%)`
-      : '0 Murid';
+      const attPercentage = totalStudents > 0 
+        ? Math.round((presentCount / totalStudents) * 100) 
+        : 100;
+
+      document.getElementById('dash-stat-attendance').innerText = totalStudents > 0
+        ? `${presentCount}/${totalStudents} (${attPercentage}%)`
+        : '0 Murid';
+    }
 
     // Savings and Cash balances
     let totalSavings = 0;
@@ -893,7 +899,64 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    // Auto-detect calendar holiday
+    const calendarHoliday = (store.state.calendar || []).find(e => e.date === attendanceSelectedDate && e.type === 'holiday');
     const currentLogs = store.getAttendance(attendanceSelectedDate);
+
+    if (calendarHoliday && !currentLogs.isHoliday && Object.keys(currentLogs).length === 0) {
+      currentLogs.isHoliday = true;
+      currentLogs.holidayName = calendarHoliday.title;
+      store.saveAttendance(attendanceSelectedDate, currentLogs);
+    }
+
+    const setHoliday = () => {
+      const name = prompt('Masukkan nama libur hari ini (contoh: Libur Hari Raya, Libur Semester, Rapat Guru):');
+      if (name === null) return;
+      const holidayName = name.trim() || 'Hari Libur';
+      store.saveAttendance(attendanceSelectedDate, { isHoliday: true, holidayName });
+      window.showToast(`Berhasil menandai tanggal ${formatDate(attendanceSelectedDate)} sebagai ${holidayName}!`);
+      renderAttendance();
+      renderDashboard();
+    };
+
+    const cancelHoliday = () => {
+      if (confirm('Apakah Anda yakin ingin mengubah hari ini kembali menjadi Hari Efektif Sekolah?')) {
+        store.saveAttendance(attendanceSelectedDate, {});
+        window.showToast('Hari ini telah diubah kembali menjadi hari efektif sekolah.');
+        renderAttendance();
+        renderDashboard();
+      }
+    };
+
+    // Toggle holiday button state
+    const toggleBtn = document.getElementById('btn-toggle-holiday');
+    if (toggleBtn) {
+      if (currentLogs.isHoliday) {
+        toggleBtn.innerHTML = '<i class="fas fa-calendar-check"></i> Set Hari Efektif';
+        toggleBtn.className = 'btn btn-primary';
+        toggleBtn.onclick = cancelHoliday;
+      } else {
+        toggleBtn.innerHTML = '<i class="fas fa-umbrella-beach"></i> Set Hari Libur';
+        toggleBtn.className = 'btn btn-outline';
+        toggleBtn.onclick = setHoliday;
+      }
+    }
+
+    if (currentLogs.isHoliday) {
+      attList.innerHTML = `
+        <div class="card" style="text-align: center; padding: 40px 20px; background: linear-gradient(135deg, var(--bg-card) 0%, var(--primary-light) 100%); border: 1px dashed var(--primary); border-radius: var(--radius-lg); margin-top: 15px; box-shadow: var(--shadow-sm);">
+          <div style="font-size: 3rem; margin-bottom: 15px;">🏝️</div>
+          <h3 style="color: var(--primary); margin-bottom: 8px;">Hari Libur Sekolah</h3>
+          <p style="font-weight: 600; font-size: 1.1rem; color: var(--text-color); margin-bottom: 5px;">${currentLogs.holidayName}</p>
+          <p class="text-muted" style="font-size: 0.85rem; max-width: 400px; margin: 0 auto 20px auto;">Hari ini ditandai sebagai hari libur. Siswa tidak terhitung absen dan tidak memengaruhi persentase kehadiran rapor.</p>
+          <button id="btn-cancel-holiday" class="btn btn-secondary" style="font-size: 0.9rem; padding: 8px 16px;">
+            <i class="fas fa-calendar-check"></i> Jadikan Hari Efektif Sekolah
+          </button>
+        </div>
+      `;
+      document.getElementById('btn-cancel-holiday').onclick = cancelHoliday;
+      return;
+    }
 
     students.forEach(student => {
       const activeStatus = currentLogs[student.id] || ''; // 'H', 'S', 'I', 'A'

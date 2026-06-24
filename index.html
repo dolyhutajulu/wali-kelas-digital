@@ -260,9 +260,14 @@
 
           <!-- Tab 1: Input Presensi -->
           <div id="tab-absen-input" class="tab-content-panel active">
-            <div class="date-selector-container">
-              <label for="attendance-date" style="font-weight:600; font-size:0.9rem;"><i class="far fa-calendar-alt"></i> Tanggal Presensi:</label>
-              <input type="date" id="attendance-date">
+            <div class="date-selector-container" style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:15px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <label for="attendance-date" style="font-weight:600; font-size:0.9rem; margin-bottom:0;"><i class="far fa-calendar-alt"></i> Tanggal Presensi:</label>
+                <input type="date" id="attendance-date">
+              </div>
+              <button id="btn-toggle-holiday" type="button" class="btn btn-outline" style="font-size:0.85rem; padding: 6px 12px; border-radius: var(--radius-md);">
+                <i class="fas fa-umbrella-beach"></i> Set Hari Libur
+              </button>
             </div>
 
             <div class="attendance-table-container">
