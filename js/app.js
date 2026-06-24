@@ -425,9 +425,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const overallAvg = store.getStudentOverallAverage(student.id);
       const avgGrade = overallAvg === null ? '-' : overallAvg;
       const kkm = store.getKkm();
-      const avgColor = overallAvg === null
-        ? 'var(--text-muted)'
-        : (overallAvg < kkm ? 'var(--danger)' : 'var(--primary)');
 
       // Att Percent
       const attSummary = store.getStudentAttendanceSummary(student.id);
@@ -441,7 +438,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="student-card-avatar ${isFemale ? 'female' : ''}" style="width: 32px; height: 32px; font-size: 0.85rem; flex-shrink: 0;">
               ${student.name.charAt(0)}
             </div>
-            <strong>${student.name}</strong>
+            <button type="button" class="student-name-btn" title="Lihat detail murid">${student.name}</button>
           </div>
         </td>
         <td data-label="NIS / NISN">
@@ -457,23 +454,44 @@ document.addEventListener('DOMContentLoaded', () => {
             <button class="attendance-btn mini a ${activeStatus === 'A' ? 'active' : ''}" data-status="A" style="width: 25px; height: 25px; font-size: 0.7rem;">A</button>
           </div>
         </td>
-        <td data-label="Tabungan" style="text-align: right; font-weight: 600; color: var(--success);">${formatRupiahShort(balance)}</td>
-        <td data-label="Rata Nilai" style="text-align: center; font-weight: 600; color: ${avgColor};">${avgGrade}</td>
+        <td data-label="Tabungan" style="text-align: center;">
+          <button type="button" class="cell-saving-btn" title="Transaksi tabungan ${student.name}" aria-label="Transaksi tabungan ${student.name}">
+            ${formatRupiahShort(balance)} <i class="fas fa-plus" style="font-size:0.6rem; opacity:0.55;"></i>
+          </button>
+        </td>
+        <td data-label="Rata Nilai" style="text-align: center;">
+          <button type="button" class="cell-grade-btn ${overallAvg === null ? 'empty' : ''} ${overallAvg !== null && overallAvg < kkm ? 'below-kkm' : ''}"
+            title="${overallAvg === null ? 'Tambah nilai' : 'Edit nilai'} ${student.name}"
+            aria-label="${overallAvg === null ? 'Tambah nilai' : 'Edit nilai'} ${student.name}">
+            ${overallAvg === null ? '<i class="fas fa-plus"></i> Nilai' : `${avgGrade} <i class="fas fa-pen" style="font-size:0.62rem; opacity:0.55;"></i>`}
+          </button>
+        </td>
         <td data-label="Kehadiran" style="text-align: center; font-weight: 600; color: var(--info);">${attPercent}</td>
-        <td data-label="Aksi Cepat">
-          <div style="display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
-            <button class="btn btn-secondary quick-grade-btn" title="Input Nilai Cepat" style="padding: 5px 8px; font-size: 0.7rem;"><i class="fas fa-award"></i> +Nilai</button>
-            <button class="btn btn-secondary quick-saving-btn" title="Transaksi Tabungan Cepat" style="padding: 5px 8px; font-size: 0.7rem;"><i class="fas fa-piggy-bank"></i> +Tabung</button>
-            <button class="btn btn-secondary detail-btn" title="Detail Murid" style="padding: 5px 8px; font-size: 0.7rem;"><i class="fas fa-eye"></i></button>
-            <button class="btn btn-primary edit-btn" title="Edit Murid" style="padding: 5px 8px; font-size: 0.7rem;"><i class="fas fa-edit"></i></button>
-            <button class="btn btn-danger delete-btn" title="Hapus Murid" style="padding: 5px 8px; font-size: 0.7rem; background-color: var(--danger); border-color: var(--danger);"><i class="fas fa-trash-alt"></i></button>
+        <td data-label="Aksi">
+          <div class="row-actions">
+            <button class="icon-action-btn act-edit edit-btn" title="Edit Murid" aria-label="Edit Murid"><i class="fas fa-edit"></i></button>
+            <button class="icon-action-btn act-delete delete-btn" title="Hapus Murid" aria-label="Hapus Murid"><i class="fas fa-trash-alt"></i></button>
           </div>
         </td>
       `;
-      
-      // Bind Detail action
-      tr.querySelector('.detail-btn').onclick = () => showStudentDetails(student.id);
-      
+
+      // Whole row opens the detail view; interactive children handle themselves.
+      tr.style.cursor = 'pointer';
+      tr.onclick = (e) => {
+        if (e.target.closest('button, input, a')) return;
+        showStudentDetails(student.id);
+      };
+
+      // Name acts as an accessible link to the detail view.
+      tr.querySelector('.student-name-btn').onclick = (e) => {
+        e.stopPropagation();
+        showStudentDetails(student.id);
+      };
+
+      // Interactive data cells: grade & savings
+      tr.querySelector('.cell-grade-btn').onclick = (e) => { e.stopPropagation(); showQuickGradeModal(student.id); };
+      tr.querySelector('.cell-saving-btn').onclick = (e) => { e.stopPropagation(); showQuickSavingModal(student.id); };
+
       // Bind Edit action
       tr.querySelector('.edit-btn').onclick = () => showEditStudentForm(student.id);
 
@@ -509,12 +527,6 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         });
       };
-
-      // Bind Quick Grade action
-      tr.querySelector('.quick-grade-btn').onclick = () => showQuickGradeModal(student.id);
-
-      // Bind Quick Saving action
-      tr.querySelector('.quick-saving-btn').onclick = () => showQuickSavingModal(student.id);
 
       // Bind Today Attendance action buttons
       tr.querySelectorAll('.attendance-btn').forEach(btn => {
