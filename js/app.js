@@ -433,7 +433,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tr.innerHTML = `
         <td data-label="Pilih" style="text-align:center;"><input type="checkbox" class="student-select-cb" ${isSelected ? 'checked' : ''} style="cursor:pointer;"></td>
         <td data-label="No">${idx + 1}</td>
-        <td data-label="Nama Murid">
+        <td data-label="Nama Murid" data-gender="${student.gender}" data-nis="${student.nis || '-'}">
           <div style="display: flex; align-items: center; gap: 10px;">
             <div class="student-card-avatar ${isFemale ? 'female' : ''}" style="width: 32px; height: 32px; font-size: 0.85rem; flex-shrink: 0;">
               ${student.name.charAt(0)}
@@ -766,6 +766,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Print profile binding
     const printBtn = document.getElementById('print-student-btn');
     if (printBtn) printBtn.onclick = () => printStudentProfile(studentId);
+
+    // Edit profile binding
+    const editBtn = document.getElementById('edit-student-detail-btn');
+    if (editBtn) {
+      editBtn.onclick = () => {
+        closeModal('modal-student-detail');
+        showEditStudentForm(studentId);
+      };
+    }
 
     openModal('modal-student-detail');
   }

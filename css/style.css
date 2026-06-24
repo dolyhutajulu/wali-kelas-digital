@@ -78,6 +78,7 @@ body {
   line-height: 1.5;
   overflow-x: hidden;
   height: 100vh;
+  height: 100dvh; /* avoid clipping under mobile browser chrome */
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -115,6 +116,7 @@ h1, h2, h3, h4, h5, h6 {
 #app-container {
   display: flex;
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
   overflow: hidden;
   position: relative;
@@ -461,8 +463,12 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 1.4rem;
   cursor: pointer;
   color: var(--text-main);
-  padding: 5px;
   border-radius: var(--radius-sm);
+  /* Min 44x44 touch target */
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
 }
 
 .page-title-container h2 {
@@ -793,6 +799,7 @@ h1, h2, h3, h4, h5, h6 {
   justify-content: center;
   gap: 8px;
   padding: 10px 16px;
+  min-height: 44px; /* mobile touch target */
   border-radius: var(--radius-md);
   font-size: 0.9rem;
   font-weight: 600;
@@ -800,6 +807,7 @@ h1, h2, h3, h4, h5, h6 {
   transition: var(--transition);
   border: none;
   text-decoration: none;
+  touch-action: manipulation; /* remove 300ms tap delay */
 }
 
 .btn-primary { background-color: var(--primary); color: #fff; }
@@ -1396,50 +1404,124 @@ h1, h2, h3, h4, h5, h6 {
     grid-template-columns: 1fr;
   }
 
-  /* Buku Induk table → card layout on mobile (responsive-first) */
+  /* Buku Induk table → Compact Directory List on mobile */
   #students .table-custom thead {
     display: none;
   }
   #students .table-custom,
-  #students .table-custom tbody,
-  #students .table-custom tr,
-  #students .table-custom td {
+  #students .table-custom tbody {
     display: block;
     width: 100%;
   }
   #students .table-custom tr {
-    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
-    padding: 6px 12px;
-    background: var(--bg-card);
     box-shadow: var(--shadow-sm);
+    gap: 8px;
+    box-sizing: border-box;
   }
+  
+  /* Hide unnecessary columns on mobile list */
+  #students .table-custom td[data-label="No"],
+  #students .table-custom td[data-label="NIS / NISN"],
+  #students .table-custom td[data-label="L/P"],
+  #students .table-custom td[data-label="Kehadiran"],
+  #students .table-custom td[data-label="Aksi"] {
+    display: none !important;
+  }
+
+  /* Style visible columns */
   #students .table-custom td {
+    display: block;
+    padding: 0 !important;
     border: none !important;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 0;
-    text-align: right !important;
+    background: none !important;
+    width: auto !important;
+    text-align: left !important;
   }
-  #students .table-custom td::before {
-    content: attr(data-label);
-    font-weight: 600;
-    color: var(--text-muted);
-    font-size: 0.78rem;
-    text-align: left;
+
+  /* Checkbox column */
+  #students .table-custom td[data-label="Pilih"] {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
     flex-shrink: 0;
   }
-  /* Action row spans full width below the label */
-  #students .table-custom td[data-label="Aksi"],
-  #students .table-custom td[data-label="Presensi Hari Ini"] {
-    flex-direction: column;
-    align-items: stretch;
+
+  /* Name & Avatar column */
+  #students .table-custom td[data-label="Nama Murid"] {
+    display: block !important;
+    flex-grow: 1;
+    min-width: 0; /* Allow text truncate */
   }
-  #students .table-custom td[data-label="Aksi"] > div {
-    justify-content: flex-start !important;
+  #students .table-custom td[data-label="Nama Murid"] .student-name-btn {
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+    max-width: 130px;
+    border: none;
+    background: none;
+    padding: 0;
+    color: var(--text-color);
+    cursor: pointer;
+  }
+  #students .table-custom td[data-label="Nama Murid"]::after {
+    content: attr(data-gender) " · NIS: " attr(data-nis);
+    display: block;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+    margin-left: 42px; /* aligns with name text since avatar width is 32px + 10px gap */
+  }
+
+  /* Attendance button group */
+  #students .table-custom td[data-label="Presensi Hari Ini"] {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  /* Hide inactive buttons if there is an active one */
+  #students .table-custom td[data-label="Presensi Hari Ini"] .attendance-button-group:has(.active) .attendance-btn:not(.active) {
+    display: none !important;
+  }
+
+  /* Tabungan button */
+  #students .table-custom td[data-label="Tabungan"] {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  #students .table-custom td[data-label="Tabungan"] button {
+    font-size: 0.75rem !important;
+    padding: 4px 8px !important;
+    background: var(--bg-body) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: var(--radius-sm);
+  }
+
+  /* Rata Nilai button */
+  #students .table-custom td[data-label="Rata Nilai"] {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  #students .table-custom td[data-label="Rata Nilai"] button {
+    font-size: 0.75rem !important;
+    padding: 4px 8px !important;
+    border-radius: var(--radius-sm);
   }
 }
 
@@ -1824,7 +1906,7 @@ h1, h2, h3, h4, h5, h6 {
   }
   
   .menu-toggle {
-    display: block;
+    display: flex;
   }
   
   .content-area {
@@ -1972,4 +2054,123 @@ h1, h2, h3, h4, h5, h6 {
 
 .toast-close:hover {
   color: #fff;
+}
+
+/* =====================================================
+   MOBILE OPTIMIZATION — safe areas, touch & scroll
+   ===================================================== */
+
+/* Faster taps on all interactive elements */
+button, a, input, select, textarea, label, .quick-action-btn, .bottom-nav-item {
+  touch-action: manipulation;
+}
+
+/* Prevent scroll-chaining / accidental pull-to-refresh inside scroll regions */
+.content-area,
+.modal-content {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Show normally-hover-revealed controls on touch devices (no hover) */
+@media (hover: none) {
+  .lesson-delete-btn {
+    opacity: 1;
+  }
+}
+/* Give the schedule delete button a real touch target */
+.lesson-delete-btn {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Safe-area insets (notch / Dynamic Island / home indicator) */
+@media (max-width: 768px) {
+  .main-header {
+    padding-top: env(safe-area-inset-top);
+    height: calc(var(--header-height) + env(safe-area-inset-top));
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+
+  .bottom-nav {
+    height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .content-area {
+    /* clear the bottom nav + home indicator */
+    padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 20px);
+    padding-left: max(15px, env(safe-area-inset-left));
+    padding-right: max(15px, env(safe-area-inset-right));
+  }
+
+  /* Bottom-sheet modal clears the home indicator */
+  .modal-content {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Comfortable touch target for the bottom-nav tabs */
+  .bottom-nav-item {
+    min-height: 48px;
+    justify-content: center;
+  }
+}
+
+/* ---- Mobile header: stop overlap, fit the pills ---- */
+@media (max-width: 768px) {
+  .main-header {
+    gap: 8px;
+    overflow: hidden; /* never spill onto the content/tabs below */
+  }
+
+  /* Let the title shrink/truncate instead of pushing the layout */
+  .header-left {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 10px;
+  }
+  .page-title-container {
+    min-width: 0;
+  }
+  .page-title-container h2 {
+    font-size: 1.15rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* Subtitle is secondary — hide on phones to keep header one line tall */
+  .page-title-container p {
+    display: none;
+  }
+
+  .header-right {
+    flex-shrink: 0;
+    gap: 8px !important;
+  }
+
+  /* Collapse the sync pill to just its icon */
+  #supabase-sync-status {
+    padding: 0 !important;
+    width: 32px;
+    height: 32px;
+    justify-content: center;
+    border-radius: var(--radius-full) !important;
+  }
+  #supabase-sync-status #sync-status-text {
+    display: none;
+  }
+
+  /* Compact class badge so it isn't clipped at the edge */
+  .class-badge {
+    font-size: 0.7rem;
+    padding: 4px 10px;
+    white-space: nowrap;
+    max-width: 42vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
