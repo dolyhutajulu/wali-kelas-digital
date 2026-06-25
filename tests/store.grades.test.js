@@ -83,3 +83,37 @@ test('deletePhComponent refuses to remove the last PH', () => {
   const res = store.deletePhComponent(subjectId, 's1_ph1');
   assert.strictEqual(res.success, false);
 });
+
+test('Nilai Rapor = round(PHavg*phW + SAS*sasW) with default 60/40', () => {
+  const store = freshStoreWithStudent();
+  const subjectId = store.getSubjects()[0].id;
+  const studentId = store.state.students[0].id;
+  store.updateClassSettings(undefined, undefined, undefined, undefined, undefined, 1);
+  store.saveGrade(studentId, subjectId, 's1_ph1', 70);
+  store.saveGrade(studentId, subjectId, 's1_ph2', 90); // PH avg = 80
+  store.saveGrade(studentId, subjectId, 's1_sas', 90);
+  assert.strictEqual(store.getSubjectPhAverage(studentId, subjectId), 80);
+  // 0.6*80 + 0.4*90 = 84
+  assert.strictEqual(store.getSubjectAverage(studentId, subjectId), 84);
+});
+
+test('weights renormalize when only PH entered, and custom weights apply', () => {
+  const store = freshStoreWithStudent();
+  const subjectId = store.getSubjects()[0].id;
+  const studentId = store.state.students[0].id;
+  store.updateClassSettings(undefined, undefined, undefined, undefined, undefined, 1);
+  store.saveGrade(studentId, subjectId, 's1_ph1', 80);
+  assert.strictEqual(store.getSubjectAverage(studentId, subjectId), 80); // only PH
+  store.setCategoryWeights(subjectId, { ph: 70, sas: 30 });
+  store.saveGrade(studentId, subjectId, 's1_sas', 90);
+  // 0.7*80 + 0.3*90 = 83
+  assert.strictEqual(store.getSubjectAverage(studentId, subjectId), 83);
+});
+
+test('getSubjectAverage is null when nothing entered', () => {
+  const store = freshStoreWithStudent();
+  const subjectId = store.getSubjects()[0].id;
+  const studentId = store.state.students[0].id;
+  store.updateClassSettings(undefined, undefined, undefined, undefined, undefined, 1);
+  assert.strictEqual(store.getSubjectAverage(studentId, subjectId), null);
+});

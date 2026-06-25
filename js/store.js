@@ -1157,82 +1157,36 @@ class Store {
     return out;
   }
 
-  // Final subject grade: average within each category, then weight ACROSS
-  // categories. Adding more tugas no longer inflates the tugas weight.
-  // Only categories that have an entered value contribute (weights renormalize).
-  // Returns null when nothing has been graded yet.
-  getSubjectAverage(studentId, subjectId) {
+  // Average of the CURRENT semester's entered PH values (2dp), or null.
+  getSubjectPhAverage(studentId, subjectId) {
     const scores = (this.state.grades[studentId] || {})[subjectId] || {};
-    
-    // Check if there are any spreadsheet keys (e.g. starting with s1_ or s2_)
-    const keys = Object.keys(scores);
-    const hasSpreadsheetKeys = keys.some(k => k.startsWith('s1_') || k.startsWith('s2_'));
-    
-    if (hasSpreadsheetKeys) {
-      const semester = this.state.settings.semester || 1;
-      return this.getSubjectSemesterAverage(studentId, subjectId, semester);
-    }
-    
-    // Fallback to legacy calculation
-    const cats = this.getSubjectCategoryAverages(studentId, subjectId);
-    const weights = this.getCategoryWeights(subjectId);
-    let weightedSum = 0;
-    let weightTotal = 0;
-    GRADE_CATEGORY_IDS.forEach(cat => {
-      if (cats[cat].avg !== null) {
-        const w = weights[cat] || 0;
-        if (w > 0) {
-          weightedSum += cats[cat].avg * w;
-          weightTotal += w;
-        }
-      }
-    });
-    if (weightTotal === 0) return null;
-    return Math.round(weightedSum / weightTotal);
+    const vals = this.getSubjectAssessments(subjectId)
+      .filter(a => a.category === 'ph')
+      .map(a => scores[a.id])
+      .filter(v => v !== undefined && v !== null && v !== '' && !isNaN(parseFloat(v)))
+      .map(v => parseFloat(v));
+    if (vals.length === 0) return null;
+    return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100;
   }
 
-  getSubjectSemesterAverage(studentId, subjectId, semester) {
+  // Final subject grade (Nilai Rapor) for the CURRENT semester.
+  // PH average and SAS are combined by per-subject weights, renormalized so a
+  // missing category does not drag the result down. Null when nothing entered.
+  getSubjectAverage(studentId, subjectId) {
     const scores = (this.state.grades[studentId] || {})[subjectId] || {};
-    const prefix = `s${semester}_`;
-    
-    // 1. Calculate RATA-RATA TA
-    const phSlots = [];
-    for (let i = 1; i <= 3; i++) {
-      const phVal = scores[`${prefix}ph${i}`];
-      const reVal = scores[`${prefix}re${i}`];
-      const hasPh = phVal !== undefined && phVal !== null && phVal !== '';
-      const hasRe = reVal !== undefined && reVal !== null && reVal !== '';
-      
-      if (hasPh || hasRe) {
-        const ph = hasPh ? parseFloat(phVal) : 0;
-        const re = hasRe ? parseFloat(reVal) : 0;
-        phSlots.push(Math.max(ph, re));
-      }
-    }
-    
-    const rataTA = phSlots.length > 0 
-      ? phSlots.reduce((a, b) => a + b, 0) / phSlots.length 
-      : null;
-      
-    // 2. Get SAS / ReSAS
-    const sasVal = scores[`${prefix}sas`];
-    const resasVal = scores[`${prefix}resas`];
-    const hasSas = sasVal !== undefined && sasVal !== null && sasVal !== '';
-    const hasReSas = resasVal !== undefined && resasVal !== null && resasVal !== '';
-    
-    const sasMax = (hasSas || hasReSas)
-      ? Math.max(hasSas ? parseFloat(sasVal) : 0, hasReSas ? parseFloat(resasVal) : 0)
-      : null;
-      
-    // 3. Compute NILAI RAPORT
-    if (rataTA !== null && sasMax !== null) {
-      return Math.round(0.6 * rataTA + 0.4 * sasMax);
-    } else if (rataTA !== null) {
-      return Math.round(rataTA);
-    } else if (sasMax !== null) {
-      return Math.round(sasMax);
-    }
-    return null;
+    const rataPH = this.getSubjectPhAverage(studentId, subjectId);
+    const sasComp = this.getSubjectAssessments(subjectId).find(a => a.category === 'sas');
+    const sasRaw = sasComp ? scores[sasComp.id] : undefined;
+    const sasVal = (sasRaw === undefined || sasRaw === null || sasRaw === '' || isNaN(parseFloat(sasRaw)))
+      ? null : parseFloat(sasRaw);
+
+    const weights = this.getCategoryWeights(subjectId);
+    let sum = 0;
+    let wTotal = 0;
+    if (rataPH !== null) { sum += rataPH * (weights.ph || 0); wTotal += (weights.ph || 0); }
+    if (sasVal !== null) { sum += sasVal * (weights.sas || 0); wTotal += (weights.sas || 0); }
+    if (wTotal === 0) return null;
+    return Math.round(sum / wTotal);
   }
 
   // Overall average across CURRENT subjects only (ignores orphaned data).
