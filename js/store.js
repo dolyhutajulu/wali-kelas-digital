@@ -832,6 +832,40 @@ class Store {
     return JSON.parse(JSON.stringify(GRADE_CATEGORIES));
   }
 
+  // Append a new PH component to the current semester (before SAS). Class-wide.
+  addPhComponent(subjectId) {
+    const sem = this._currentSemester();
+    const list = this._ensureSemesterAssessments(subjectId, sem);
+    let n = 1;
+    while (list.some(a => a.id === `s${sem}_ph${n}`)) n += 1;
+    const component = { id: `s${sem}_ph${n}`, name: `PH${n}`, category: 'ph' };
+    const sasIdx = list.findIndex(a => a.category === 'sas');
+    if (sasIdx === -1) list.push(component);
+    else list.splice(sasIdx, 0, component);
+    this.saveState();
+    return { success: true, component };
+  }
+
+  // Delete a PH component from the current semester and drop its stored grades
+  // for every student. Refuses when only one PH remains.
+  deletePhComponent(subjectId, componentId) {
+    const sem = this._currentSemester();
+    const list = this._ensureSemesterAssessments(subjectId, sem);
+    const phCount = list.filter(a => a.category === 'ph').length;
+    if (phCount <= 1) return { success: false, error: 'Minimal harus ada 1 Penilaian Harian.' };
+    const idx = list.findIndex(a => a.id === componentId && a.category === 'ph');
+    if (idx === -1) return { success: false, error: 'Komponen PH tidak ditemukan.' };
+    list.splice(idx, 1);
+    Object.keys(this.state.grades || {}).forEach(sid => {
+      const subjGrades = this.state.grades[sid][subjectId];
+      if (subjGrades && Object.prototype.hasOwnProperty.call(subjGrades, componentId)) {
+        delete subjGrades[componentId];
+      }
+    });
+    this.saveState();
+    return { success: true };
+  }
+
   // Ensure the subject has a persisted, editable assessments array (normalized).
   _ensureAssessments(subject) {
     if (!Array.isArray(subject.assessments) || subject.assessments.length === 0) {
