@@ -2066,62 +2066,46 @@ document.addEventListener('DOMContentLoaded', () => {
       renderGradesRecap();
     };
 
-    // GRADE GRID: SAVE ALL
-    const btnSaveGrid = document.getElementById('btn-save-grade-grid');
-    if (btnSaveGrid) {
-      btnSaveGrid.onclick = () => {
-        if (!gradeGridSubjectId) {
-          alert('Pilih mata pelajaran terlebih dahulu!');
-          return;
+    // GRADE GRID: ADD PH COLUMN
+    const btnAddPh = document.getElementById('btn-add-ph');
+    if (btnAddPh) {
+      btnAddPh.onclick = () => {
+        if (!gradeGridSubjectId) { window.showToast('Pilih mata pelajaran dahulu.', 'error'); return; }
+        const res = store.addPhComponent(gradeGridSubjectId);
+        if (res.success) {
+          window.showToast(`Kolom ${res.component.name} ditambahkan.`, 'success');
+          renderGradeGrid();
         }
-        const map = {};
-        document.querySelectorAll('#grade-grid-body .grid-cell').forEach(inp => {
-          const sid = inp.getAttribute('data-student');
-          const aid = inp.getAttribute('data-assessment');
-          if (!map[sid]) map[sid] = {};
-          map[sid][aid] = inp.value;
-        });
-        store.saveGradesBatch(gradeGridSubjectId, map);
-        alert('Semua nilai berhasil disimpan!');
-        renderGradeGrid();
-        renderGradesRecap();
-        renderStudents();
       };
     }
 
-    // GRADE GRID: ADD COMPONENT
-    const btnAddGridComp = document.getElementById('btn-add-grid-component');
-    if (btnAddGridComp) {
-      btnAddGridComp.onclick = () => {
-        if (!gradeGridSubjectId) {
-          alert('Pilih mata pelajaran terlebih dahulu!');
-          return;
-        }
-        openAssessmentComponentModal(gradeGridSubjectId, () => renderGradeGrid());
-      };
+    // GRADE GRID: EDIT WEIGHTS (PH% / SAS%)
+    const btnEditWeights = document.getElementById('btn-edit-weights');
+    const weightPopover = document.getElementById('weight-popover');
+    const weightPh = document.getElementById('weight-ph');
+    const weightSas = document.getElementById('weight-sas');
+    const weightTotal = document.getElementById('weight-total');
+    function refreshWeightTotal() {
+      const total = (parseFloat(weightPh.value) || 0) + (parseFloat(weightSas.value) || 0);
+      weightTotal.textContent = total === 100
+        ? `Total: ${total}% ✓`
+        : `Total: ${total}% — idealnya 100% (sistem tetap menormalisasi).`;
     }
-
-    // GRADE GRID: CLEAR ALL GRADES FOR THE SELECTED SUBJECT
-    const btnClearSubjGrades = document.getElementById('btn-clear-subject-grades');
-    if (btnClearSubjGrades) {
-      btnClearSubjGrades.onclick = () => {
-        if (!gradeGridSubjectId) {
-          alert('Pilih mata pelajaran terlebih dahulu!');
-          return;
-        }
-        const subjName = store.getSubjectLabel(gradeGridSubjectId);
-        confirmAction({
-          title: 'Kosongkan Nilai Mapel',
-          message: `Kosongkan <strong>seluruh nilai ${subjName}</strong> untuk semua murid? Mata pelajaran dan komponennya tetap ada.`,
-          confirmLabel: 'Kosongkan Nilai',
-          onConfirm: () => {
-            const res = store.clearSubjectGrades(gradeGridSubjectId);
-            alert(`Nilai ${subjName} berhasil dikosongkan (${res.cleared} entri).`);
-            renderGradeGrid();
-            renderGradesRecap();
-            renderStudents();
-          }
-        });
+    if (btnEditWeights && weightPopover) {
+      btnEditWeights.onclick = () => {
+        if (!gradeGridSubjectId) { window.showToast('Pilih mata pelajaran dahulu.', 'error'); return; }
+        const w = store.getCategoryWeights(gradeGridSubjectId);
+        weightPh.value = w.ph; weightSas.value = w.sas; refreshWeightTotal();
+        weightPopover.hidden = !weightPopover.hidden;
+      };
+      weightPh.oninput = refreshWeightTotal;
+      weightSas.oninput = refreshWeightTotal;
+      document.getElementById('btn-weight-cancel').onclick = () => { weightPopover.hidden = true; };
+      document.getElementById('btn-weight-save').onclick = () => {
+        store.setCategoryWeights(gradeGridSubjectId, { ph: weightPh.value, sas: weightSas.value });
+        weightPopover.hidden = true;
+        window.showToast('Bobot disimpan.', 'success');
+        renderGradeGrid(); renderGradesRecap(); renderStudents();
       };
     }
 
@@ -2807,22 +2791,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- GRADE GRID (input nilai sekelas sekaligus) ---
   // Build the ordered category layout for the currently selected subject.
-  function gridCategoryLayout() {
-    const assessments = store.getSubjectAssessments(gradeGridSubjectId);
-    const weights = store.getCategoryWeights(gradeGridSubjectId);
-    return store.getGradeCategories().map(cat => {
-      const comps = assessments.filter(a => a.category === cat.id);
-      return {
-        id: cat.id,
-        name: cat.name,
-        multi: cat.multi,
-        weight: weights[cat.id] || 0,
-        comps,
-        showAvg: cat.multi && comps.length > 1   // show "Rata" sub-column
-      };
-    }).filter(c => c.comps.length > 0);
-  }
-
+  // --- GRADE GRID (input nilai sekelas, satu semester aktif) ---
   function renderGradeGrid() {
     const table = document.getElementById('grade-grid-table');
     const body = document.getElementById('grade-grid-body');
@@ -2833,193 +2802,132 @@ document.addEventListener('DOMContentLoaded', () => {
     const subjects = store.getSubjects();
     if (subjects.length === 0) {
       tabContainer.innerHTML = '';
-      body.innerHTML = `<tr><td colspan="22" class="text-center text-muted py-4">Belum ada mata pelajaran. Tambahkan di tab Pengaturan.</td></tr>`;
+      thead.innerHTML = '';
+      body.innerHTML = `<tr><td colspan="4" class="text-center text-muted py-4">Belum ada mata pelajaran. Tambahkan di tab Pengaturan.</td></tr>`;
       return;
     }
-
     if (!gradeGridSubjectId || !subjects.some(s => s.id === gradeGridSubjectId)) {
       gradeGridSubjectId = subjects[0].id;
     }
 
-    // Render Google Sheets style tabs
+    // Subject tabs (one "sheet" per subject)
     tabContainer.innerHTML = subjects.map(s => `
       <button class="spreadsheet-tab-btn ${s.id === gradeGridSubjectId ? 'active' : ''}" data-subject="${s.id}">
-        <i class="fas fa-file-excel" style="color: #107c41;"></i> ${s.name}
+        <i class="fas fa-file-excel" style="color:#107c41;"></i> ${s.name}
       </button>
     `).join('');
-
     tabContainer.querySelectorAll('.spreadsheet-tab-btn').forEach(btn => {
-      btn.onclick = () => {
-        gradeGridSubjectId = btn.getAttribute('data-subject');
-        renderGradeGrid();
-      };
+      btn.onclick = () => { gradeGridSubjectId = btn.getAttribute('data-subject'); renderGradeGrid(); };
     });
 
     const students = store.state.students;
     const kkm = store.getKkm();
+    const assessments = store.getSubjectAssessments(gradeGridSubjectId);
+    const phComps = assessments.filter(a => a.category === 'ph');
+    const sasComp = assessments.find(a => a.category === 'sas');
+    const semLabel = store.state.settings.semester === 2 ? 'Semester 2' : 'Semester 1';
 
-    // Two-row Spreadsheet header: Semester 1 & Semester 2
-    let row1 = `
-      <th rowspan="2" style="width: 40px; text-align: center; background-color: var(--bg-main); border: 1px solid var(--border-color);">No</th>
-      <th rowspan="2" style="min-width: 220px; padding: 10px 12px; text-align: left; background-color: var(--bg-main); border: 1px solid var(--border-color); position: sticky; left: 0; z-index: 10;">Nama Murid</th>
-      <th colspan="10" style="text-align: center; background-color: rgba(13, 148, 136, 0.08); border: 1px solid var(--border-color); border-bottom: 2px solid var(--primary); font-weight: 700;">Semester 1</th>
-      <th colspan="10" style="text-align: center; background-color: rgba(8, 145, 178, 0.08); border: 1px solid var(--border-color); border-bottom: 2px solid #0891b2; font-weight: 700;">Semester 2</th>
+    // Header: No | Nama | PH1..PHn (deletable) | RATA PH | SAS | NILAI RAPOR
+    let head = `
+      <th style="width:40px;text-align:center;border:1px solid var(--border-color);">No</th>
+      <th style="min-width:160px;text-align:left;border:1px solid var(--border-color);position:sticky;left:0;background:var(--bg-card);z-index:5;">Nama Murid <span style="font-weight:400;color:var(--text-muted);font-size:0.72rem;">· ${semLabel}</span></th>
     `;
+    phComps.forEach(a => {
+      const canDelete = phComps.length > 1;
+      head += `<th class="text-center ph-col-head" style="width:64px;border:1px solid var(--border-color);"><span>${a.name}</span>${canDelete ? `<button type="button" class="ph-del-btn" data-comp="${a.id}" title="Hapus ${a.name}" aria-label="Hapus ${a.name}"><i class="fas fa-times"></i></button>` : ''}</th>`;
+    });
+    head += `<th class="text-center" style="width:74px;border:1px solid var(--border-color);background:rgba(13,148,136,0.05);color:var(--primary);font-weight:bold;">RATA PH</th>`;
+    head += `<th class="text-center" style="width:64px;border:1px solid var(--border-color);">SAS</th>`;
+    head += `<th class="text-center" style="width:92px;border:1px solid var(--border-color);background:var(--primary-light);color:var(--primary);font-weight:bold;">NILAI RAPOR</th>`;
+    thead.innerHTML = `<tr>${head}</tr>`;
 
-    let row2 = '';
-    // Semester 1 headers
-    row2 += `
-      <th class="text-center" style="width: 60px; background-color: var(--bg-main); border: 1px solid var(--border-color);">PH1</th>
-      <th class="text-center" style="width: 60px; background-color: var(--bg-main); border: 1px solid var(--border-color);">Re1</th>
-      <th class="text-center" style="width: 60px; background-color: var(--bg-main); border: 1px solid var(--border-color);">PH2</th>
-      <th class="text-center" style="width: 60px; background-color: var(--bg-main); border: 1px solid var(--border-color);">Re2</th>
-      <th class="text-center" style="width: 60px; background-color: var(--bg-main); border: 1px solid var(--border-color);">PH3</th>
-      <th class="text-center" style="width: 60px; background-color: var(--bg-main); border: 1px solid var(--border-color);">Re3</th>
-      <th class="text-center" style="width: 85px; background-color: rgba(13, 148, 136, 0.03); border: 1px solid var(--border-color); font-weight: bold; color: var(--primary);">Rata TA</th>
-      <th class="text-center" style="width: 60px; background-color: var(--bg-main); border: 1px solid var(--border-color);">SAS</th>
-      <th class="text-center" style="width: 60px; background-color: var(--bg-main); border: 1px solid var(--border-color);">ReSAS</th>
-      <th class="text-center" style="width: 95px; background-color: var(--primary-light); border: 1px solid var(--border-color); font-weight: bold; color: var(--primary);">Nilai Rapor</th>
-    `;
-    // Semester 2 headers
-    row2 += `
-      <th class="text-center" style="width: 60px; background-color: var(--bg-main); border: 1px solid var(--border-color);">PH1</th>
-      <th class="text-center" style="width: 60px; background-color: var(--bg-main); border: 1px solid var(--border-color);">Re1</th>
-      <th class="text-center" style="width: 60px; background-color: var(--bg-main); border: 1px solid var(--border-color);">PH2</th>
-      <th class="text-center" style="width: 60px; background-color: var(--bg-main); border: 1px solid var(--border-color);">Re2</th>
-      <th class="text-center" style="width: 60px; background-color: var(--bg-main); border: 1px solid var(--border-color);">PH3</th>
-      <th class="text-center" style="width: 60px; background-color: var(--bg-main); border: 1px solid var(--border-color);">Re3</th>
-      <th class="text-center" style="width: 85px; background-color: rgba(8, 145, 178, 0.03); border: 1px solid var(--border-color); font-weight: bold; color: #0891b2;">Rata TA</th>
-      <th class="text-center" style="width: 60px; background-color: var(--bg-main); border: 1px solid var(--border-color);">SAS</th>
-      <th class="text-center" style="width: 60px; background-color: var(--bg-main); border: 1px solid var(--border-color);">ReSAS</th>
-      <th class="text-center" style="width: 95px; background-color: rgba(8, 145, 178, 0.1); border: 1px solid var(--border-color); font-weight: bold; color: #0891b2;">Nilai Rapor</th>
-    `;
-
-    thead.innerHTML = `<tr>${row1}</tr><tr>${row2}</tr>`;
-
+    const totalCols = phComps.length + 5;
     if (students.length === 0) {
-      body.innerHTML = `<tr><td colspan="22" class="text-center text-muted py-4">Belum ada data murid. Silakan tambahkan murid di tab Buku Induk.</td></tr>`;
-      return;
+      body.innerHTML = `<tr><td colspan="${totalCols}" class="text-center text-muted py-4">Belum ada data murid. Tambahkan di tab Buku Induk.</td></tr>`;
+    } else {
+      body.innerHTML = '';
+      const cellInput = (student, comp) => {
+        const scores = (store.getGrades(student.id)[gradeGridSubjectId]) || {};
+        const val = scores[comp.id] !== undefined ? scores[comp.id] : '';
+        const under = val !== '' && parseFloat(val) < kkm;
+        return `<td style="border:1px solid var(--border-color);padding:2px;text-align:center;"><input type="number" min="0" max="100" inputmode="numeric" class="spreadsheet-cell-input grid-cell ${under ? 'spreadsheet-cell-under-kkm' : ''}" data-student="${student.id}" data-comp="${comp.id}" value="${val}" placeholder="-"></td>`;
+      };
+      students.forEach((student, idx) => {
+        const rataPH = store.getSubjectPhAverage(student.id, gradeGridSubjectId);
+        const rapor = store.getSubjectAverage(student.id, gradeGridSubjectId);
+        let row = `
+          <td style="text-align:center;border:1px solid var(--border-color);font-weight:500;">${idx + 1}</td>
+          <td style="border:1px solid var(--border-color);font-weight:600;padding:6px 12px;position:sticky;left:0;background:var(--bg-card);z-index:5;">${student.name}</td>
+        `;
+        phComps.forEach(a => { row += cellInput(student, a); });
+        row += `<td class="text-center" style="border:1px solid var(--border-color);font-weight:bold;color:var(--text-muted);background:rgba(13,148,136,0.02);">${rataPH === null ? '-' : Math.round(rataPH)}</td>`;
+        row += sasComp ? cellInput(student, sasComp) : `<td style="border:1px solid var(--border-color);"></td>`;
+        const raporUnder = rapor !== null && rapor < kkm;
+        row += `<td class="text-center ${raporUnder ? 'spreadsheet-cell-under-kkm' : ''}" style="border:1px solid var(--border-color);font-weight:bold;background:var(--primary-light);color:var(--primary);">${rapor === null ? '-' : rapor}</td>`;
+        const tr = document.createElement('tr');
+        tr.innerHTML = row;
+        body.appendChild(tr);
+      });
+
+      // RATA-RATA KELAS row
+      const avgOf = (fn) => {
+        const vals = students.map(fn).filter(v => v !== null && v !== undefined && !isNaN(v));
+        return vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : null;
+      };
+      const rawAvg = (compId) => avgOf(st => {
+        const s = (store.getGrades(st.id)[gradeGridSubjectId] || {})[compId];
+        return (s === undefined || s === '' || s === null) ? null : parseFloat(s);
+      });
+      const avgRow = document.createElement('tr');
+      avgRow.style.fontWeight = 'bold';
+      avgRow.style.backgroundColor = 'var(--bg-main)';
+      let ac = `
+        <td style="border:1px solid var(--border-color);"></td>
+        <td style="border:1px solid var(--border-color);padding:8px 12px;position:sticky;left:0;background:var(--bg-main);z-index:5;">RATA-RATA KELAS</td>
+      `;
+      phComps.forEach(a => { const v = rawAvg(a.id); ac += `<td class="text-center" style="border:1px solid var(--border-color);">${v === null ? '-' : v}</td>`; });
+      const phRata = avgOf(st => store.getSubjectPhAverage(st.id, gradeGridSubjectId));
+      ac += `<td class="text-center" style="border:1px solid var(--border-color);color:var(--primary);background:rgba(13,148,136,0.02);">${phRata === null ? '-' : phRata}</td>`;
+      const sasAvg = sasComp ? rawAvg(sasComp.id) : null;
+      ac += `<td class="text-center" style="border:1px solid var(--border-color);">${sasAvg === null ? '-' : sasAvg}</td>`;
+      const raporAvg = avgOf(st => store.getSubjectAverage(st.id, gradeGridSubjectId));
+      ac += `<td class="text-center" style="border:1px solid var(--border-color);background:var(--primary-light);color:var(--primary);">${raporAvg === null ? '-' : raporAvg}</td>`;
+      avgRow.innerHTML = ac;
+      body.appendChild(avgRow);
     }
 
-    body.innerHTML = '';
-    students.forEach((student, idx) => {
-      const scores = store.getGrades(student.id)[gradeGridSubjectId] || {};
-      
-      let cells = `
-        <td style="text-align: center; border: 1px solid var(--border-color); font-weight: 500;">${idx + 1}</td>
-        <td style="border: 1px solid var(--border-color); font-weight: 600; padding: 6px 12px; position: sticky; left: 0; background-color: var(--bg-card); z-index: 5;">${student.name}</td>
-      `;
-
-      const makeInputCell = (compKey) => {
-        const val = scores[compKey] !== undefined ? scores[compKey] : '';
-        const isUnderKkm = val !== '' && parseFloat(val) < kkm;
-        return `
-          <td style="border: 1px solid var(--border-color); padding: 2px; text-align: center; vertical-align: middle; position: relative;">
-            <input type="number" min="0" max="100" 
-              class="spreadsheet-cell-input grid-cell ${isUnderKkm ? 'spreadsheet-cell-under-kkm' : ''}" 
-              data-student="${student.id}" 
-              data-comp="${compKey}" 
-              value="${val}" 
-              placeholder="-">
-          </td>
-        `;
-      };
-
-      // Semester 1 input cells
-      cells += makeInputCell('s1_ph1');
-      cells += makeInputCell('s1_re1');
-      cells += makeInputCell('s1_ph2');
-      cells += makeInputCell('s1_re2');
-      cells += makeInputCell('s1_ph3');
-      cells += makeInputCell('s1_re3');
-      
-      // Semester 1 calculated columns
-      const s1RataTA = getCalculatedRataTA(scores, 1);
-      const s1Rapor = store.getSubjectSemesterAverage(student.id, gradeGridSubjectId, 1);
-      cells += `
-        <td class="text-center spreadsheet-cell-readonly s1-rata-ta" data-student="${student.id}" style="border: 1px solid var(--border-color); font-weight: bold; background-color: rgba(13, 148, 136, 0.02);">${s1RataTA === null ? '-' : Math.round(s1RataTA)}</td>
-      `;
-      cells += makeInputCell('s1_sas');
-      cells += makeInputCell('s1_resas');
-      cells += `
-        <td class="text-center spreadsheet-cell-readonly s1-rapor ${s1Rapor !== null && s1Rapor < kkm ? 'spreadsheet-cell-under-kkm' : ''}" data-student="${student.id}" style="border: 1px solid var(--border-color); font-weight: bold; background-color: var(--primary-light); color: var(--primary);">${s1Rapor === null ? '-' : s1Rapor}</td>
-      `;
-
-      // Semester 2 input cells
-      cells += makeInputCell('s2_ph1');
-      cells += makeInputCell('s2_re1');
-      cells += makeInputCell('s2_ph2');
-      cells += makeInputCell('s2_re2');
-      cells += makeInputCell('s2_ph3');
-      cells += makeInputCell('s2_re3');
-
-      // Semester 2 calculated columns
-      const s2RataTA = getCalculatedRataTA(scores, 2);
-      const s2Rapor = store.getSubjectSemesterAverage(student.id, gradeGridSubjectId, 2);
-      cells += `
-        <td class="text-center spreadsheet-cell-readonly s2-rata-ta" data-student="${student.id}" style="border: 1px solid var(--border-color); font-weight: bold; background-color: rgba(8, 145, 178, 0.02);">${s2RataTA === null ? '-' : Math.round(s2RataTA)}</td>
-      `;
-      cells += makeInputCell('s2_sas');
-      cells += makeInputCell('s2_resas');
-      cells += `
-        <td class="text-center spreadsheet-cell-readonly s2-rapor ${s2Rapor !== null && s2Rapor < kkm ? 'spreadsheet-cell-under-kkm' : ''}" data-student="${student.id}" style="border: 1px solid var(--border-color); font-weight: bold; background-color: rgba(8, 145, 178, 0.08); color: #0891b2;">${s2Rapor === null ? '-' : s2Rapor}</td>
-      `;
-
-      const tr = document.createElement('tr');
-      tr.innerHTML = cells;
-      body.appendChild(tr);
-    });
-
-    // Class average row at the bottom
-    renderClassAveragesRow();
-
-    // Bind Live Auto-Save and real-time recalculations
+    // Auto-save on change; full re-render keeps RATA PH / NILAI RAPOR / averages correct.
     body.querySelectorAll('.spreadsheet-cell-input.grid-cell').forEach(inp => {
-      inp.oninput = () => {
-        const studentId = inp.getAttribute('data-student');
-        const compKey = inp.getAttribute('data-comp');
-        let valStr = inp.value.trim();
-        
-        // Save value instantly
-        if (!store.state.grades[studentId]) {
-          store.state.grades[studentId] = {};
-        }
-        if (!store.state.grades[studentId][gradeGridSubjectId]) {
-          store.state.grades[studentId][gradeGridSubjectId] = {};
-        }
-        
-        if (valStr === '') {
-          delete store.state.grades[studentId][gradeGridSubjectId][compKey];
-          inp.classList.remove('spreadsheet-cell-under-kkm');
-        } else {
-          let val = parseFloat(valStr);
-          if (isNaN(val)) val = 0;
-          val = Math.max(0, Math.min(100, val));
-          store.state.grades[studentId][gradeGridSubjectId][compKey] = val;
-          
-          // Color KKM live
-          if (val < kkm) {
-            inp.classList.add('spreadsheet-cell-under-kkm');
-          } else {
-            inp.classList.remove('spreadsheet-cell-under-kkm');
-          }
-        }
-        
-        // Save to LocalStorage & trigger Supabase push asynchronously
-        store.saveState();
-
-        // Show auto-save indicator pulse
-        showAutoSavePulse();
-
-        // Recalculate row (Rata-rata TA, Nilai Rapor) for this student
-        recomputeSpreadsheetRow(studentId);
-
-        // Recalculate column averages at bottom
-        renderClassAveragesRow();
+      inp.onchange = () => {
+        const sid = inp.getAttribute('data-student');
+        const cid = inp.getAttribute('data-comp');
+        store.saveGrade(sid, gradeGridSubjectId, cid, inp.value);
+        if (typeof showAutoSavePulse === 'function') showAutoSavePulse();
+        renderGradeGrid();
+        renderGradesRecap();
+        renderStudents();
       };
     });
 
-    // Bind clear subject grades
+    // PH column delete buttons.
+    thead.querySelectorAll('.ph-del-btn').forEach(btn => {
+      btn.onclick = () => {
+        const compId = btn.getAttribute('data-comp');
+        confirmAction({
+          title: 'Hapus Kolom PH',
+          message: 'Hapus kolom PH ini? Nilai PH ini untuk <strong>semua murid</strong> akan terhapus permanen.',
+          confirmLabel: 'Hapus PH',
+          onConfirm: () => {
+            const res = store.deletePhComponent(gradeGridSubjectId, compId);
+            if (!res.success) { window.showToast(res.error, 'error'); return; }
+            window.showToast('Kolom PH dihapus.', 'success');
+            renderGradeGrid(); renderGradesRecap(); renderStudents();
+          }
+        });
+      };
+    });
+
+    // Clear all grades for the selected subject.
     const clearBtn = document.getElementById('btn-clear-subject-grades-spreadsheet');
     if (clearBtn) {
       clearBtn.onclick = () => {
@@ -3031,176 +2939,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       };
     }
-  }
-
-  function getCalculatedRataTA(scores, semester) {
-    const prefix = `s${semester}_`;
-    const phSlots = [];
-    for (let i = 1; i <= 3; i++) {
-      const phVal = scores[`${prefix}ph${i}`];
-      const reVal = scores[`${prefix}re${i}`];
-      const hasPh = phVal !== undefined && phVal !== null && phVal !== '';
-      const hasRe = reVal !== undefined && reVal !== null && reVal !== '';
-      
-      if (hasPh || hasRe) {
-        const ph = hasPh ? parseFloat(phVal) : 0;
-        const re = hasRe ? parseFloat(reVal) : 0;
-        phSlots.push(Math.max(ph, re));
-      }
-    }
-    return phSlots.length > 0 
-      ? phSlots.reduce((a, b) => a + b, 0) / phSlots.length 
-      : null;
-  }
-
-  function recomputeSpreadsheetRow(studentId) {
-    const kkm = store.getKkm();
-    const scores = store.getGrades(studentId)[gradeGridSubjectId] || {};
-    
-    // Recalculate Semester 1
-    const s1RataTA = getCalculatedRataTA(scores, 1);
-    const s1Rapor = store.getSubjectSemesterAverage(studentId, gradeGridSubjectId, 1);
-    const s1RataCell = document.querySelector(`.s1-rata-ta[data-student="${studentId}"]`);
-    const s1RaporCell = document.querySelector(`.s1-rapor[data-student="${studentId}"]`);
-    
-    if (s1RataCell) s1RataCell.textContent = s1RataTA === null ? '-' : Math.round(s1RataTA);
-    if (s1RaporCell) {
-      s1RaporCell.textContent = s1Rapor === null ? '-' : s1Rapor;
-      if (s1Rapor !== null && s1Rapor < kkm) {
-        s1RaporCell.classList.add('spreadsheet-cell-under-kkm');
-      } else {
-        s1RaporCell.classList.remove('spreadsheet-cell-under-kkm');
-      }
-    }
-
-    // Recalculate Semester 2
-    const s2RataTA = getCalculatedRataTA(scores, 2);
-    const s2Rapor = store.getSubjectSemesterAverage(studentId, gradeGridSubjectId, 2);
-    const s2RataCell = document.querySelector(`.s2-rata-ta[data-student="${studentId}"]`);
-    const s2RaporCell = document.querySelector(`.s2-rapor[data-student="${studentId}"]`);
-    
-    if (s2RataCell) s2RataCell.textContent = s2RataTA === null ? '-' : Math.round(s2RataTA);
-    if (s2RaporCell) {
-      s2RaporCell.textContent = s2Rapor === null ? '-' : s2Rapor;
-      if (s2Rapor !== null && s2Rapor < kkm) {
-        s2RaporCell.classList.add('spreadsheet-cell-under-kkm');
-      } else {
-        s2RaporCell.classList.remove('spreadsheet-cell-under-kkm');
-      }
-    }
-  }
-
-  function renderClassAveragesRow() {
-    const table = document.getElementById('grade-grid-table');
-    const body = document.getElementById('grade-grid-body');
-    if (!table || !body) return;
-
-    const oldAvgRow = document.getElementById('spreadsheet-class-averages-row');
-    if (oldAvgRow) oldAvgRow.remove();
-
-    const students = store.state.students;
-    if (students.length === 0) return;
-
-    const averages = {};
-    const counts = {};
-
-    const compKeys = [
-      's1_ph1', 's1_re1', 's1_ph2', 's1_re2', 's1_ph3', 's1_re3',
-      's1_sas', 's1_resas',
-      's2_ph1', 's2_re1', 's2_ph2', 's2_re2', 's2_ph3', 's2_re3',
-      's2_sas', 's2_resas'
-    ];
-
-    compKeys.forEach(k => {
-      averages[k] = 0;
-      counts[k] = 0;
-    });
-
-    const calculatedCols = [
-      's1_rata', 's1_rapor',
-      's2_rata', 's2_rapor'
-    ];
-    calculatedCols.forEach(k => {
-      averages[k] = 0;
-      counts[k] = 0;
-    });
-
-    students.forEach(student => {
-      const scores = store.getGrades(student.id)[gradeGridSubjectId] || {};
-      
-      compKeys.forEach(k => {
-        const val = scores[k];
-        if (val !== undefined && val !== null && val !== '') {
-          averages[k] += parseFloat(val);
-          counts[k]++;
-        }
-      });
-
-      const s1Rata = getCalculatedRataTA(scores, 1);
-      if (s1Rata !== null) {
-        averages['s1_rata'] += s1Rata;
-        counts['s1_rata']++;
-      }
-      const s1Rapor = store.getSubjectSemesterAverage(student.id, gradeGridSubjectId, 1);
-      if (s1Rapor !== null) {
-        averages['s1_rapor'] += s1Rapor;
-        counts['s1_rapor']++;
-      }
-      const s2Rata = getCalculatedRataTA(scores, 2);
-      if (s2Rata !== null) {
-        averages['s2_rata'] += s2Rata;
-        counts['s2_rata']++;
-      }
-      const s2Rapor = store.getSubjectSemesterAverage(student.id, gradeGridSubjectId, 2);
-      if (s2Rapor !== null) {
-        averages['s2_rapor'] += s2Rapor;
-        counts['s2_rapor']++;
-      }
-    });
-
-    const tr = document.createElement('tr');
-    tr.id = 'spreadsheet-class-averages-row';
-    tr.style.backgroundColor = 'var(--bg-main)';
-    tr.style.fontWeight = 'bold';
-    tr.style.borderTop = '2px solid var(--border-color)';
-    tr.style.borderBottom = '2px solid var(--border-color)';
-
-    let cells = `
-      <td style="text-align: center; border: 1px solid var(--border-color); padding: 8px;"></td>
-      <td style="border: 1px solid var(--border-color); padding: 8px 12px; position: sticky; left: 0; background-color: var(--bg-main); z-index: 5;">RATA-RATA KELAS</td>
-    `;
-
-    const renderAvgCell = (key, customStyle = '') => {
-      const avg = counts[key] > 0 ? Math.round((averages[key] / counts[key]) * 10) / 10 : null;
-      return `<td class="text-center" style="border: 1px solid var(--border-color); padding: 8px; ${customStyle}">${avg === null ? '-' : avg}</td>`;
-    };
-
-    // Semester 1 averages
-    cells += renderAvgCell('s1_ph1');
-    cells += renderAvgCell('s1_re1');
-    cells += renderAvgCell('s1_ph2');
-    cells += renderAvgCell('s1_re2');
-    cells += renderAvgCell('s1_ph3');
-    cells += renderAvgCell('s1_re3');
-    cells += renderAvgCell('s1_rata', 'color: var(--primary); background-color: rgba(13, 148, 136, 0.02);');
-    cells += renderAvgCell('s1_sas');
-    cells += renderAvgCell('s1_resas');
-    cells += renderAvgCell('s1_rapor', 'background-color: var(--primary-light); color: var(--primary);');
-
-    // Semester 2 averages
-    cells += renderAvgCell('s2_ph1');
-    cells += renderAvgCell('s2_re1');
-    cells += renderAvgCell('s2_ph2');
-    cells += renderAvgCell('s2_re2');
-    cells += renderAvgCell('s2_ph3');
-    cells += renderAvgCell('s2_re3');
-    cells += renderAvgCell('s2_rata', 'color: #0891b2; background-color: rgba(8, 145, 178, 0.02);');
-    cells += renderAvgCell('s2_sas');
-    cells += renderAvgCell('s2_resas');
-    cells += renderAvgCell('s2_rapor', 'background-color: rgba(8, 145, 178, 0.1); color: #0891b2;');
-
-    tr.innerHTML = cells;
-    body.appendChild(tr);
   }
 
   let saveIndicatorTimeout = null;

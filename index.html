@@ -326,6 +326,24 @@
                 <span id="grades-autosave-indicator" class="text-muted" style="font-size:0.8rem; display:inline-flex; align-items:center; gap:4px; opacity:0.85; transition: opacity 0.3s ease;">
                   <i class="fas fa-check-circle" style="color:var(--success);"></i> Semua perubahan disimpan otomatis
                 </span>
+                <button id="btn-add-ph" class="btn btn-secondary" type="button" style="font-size:0.8rem; padding:5px 10px;">
+                  <i class="fas fa-plus"></i> Tambah PH
+                </button>
+                <div style="position: relative; display: inline-block;">
+                  <button id="btn-edit-weights" class="btn btn-secondary" type="button" style="font-size:0.8rem; padding:5px 10px;">
+                    <i class="fas fa-sliders-h"></i> Atur Bobot
+                  </button>
+                  <div id="weight-popover" class="weight-popover" hidden>
+                    <h4>Bobot Nilai Rapor</h4>
+                    <label>PH (%) <input id="weight-ph" type="number" min="0" max="100" inputmode="numeric"></label>
+                    <label>SAS (%) <input id="weight-sas" type="number" min="0" max="100" inputmode="numeric"></label>
+                    <p id="weight-total" class="weight-total"></p>
+                    <div class="weight-popover-actions">
+                      <button id="btn-weight-cancel" class="btn btn-secondary" type="button">Batal</button>
+                      <button id="btn-weight-save" class="btn btn-primary" type="button">Simpan</button>
+                    </div>
+                  </div>
+                </div>
                 <button type="button" id="btn-clear-subject-grades-spreadsheet" class="btn btn-outline" style="border: 1px dashed var(--danger); color: var(--danger); background: none; font-size: 0.8rem; padding: 5px 10px; border-radius: var(--radius-md);">
                   <i class="fas fa-eraser"></i> Kosongkan Mapel
                 </button>
@@ -338,7 +356,7 @@
             </div>
 
             <div class="table-wrapper" style="border: 1px solid var(--border-color); border-top: none; border-bottom-left-radius: var(--radius-md); border-bottom-right-radius: var(--radius-md); background: var(--bg-card); overflow-x: auto; max-height: 65vh;">
-              <table class="table-custom" id="grade-grid-table" style="margin-bottom:0; font-size:0.82rem; border-collapse: collapse; min-width: 1800px;">
+              <table class="table-custom" id="grade-grid-table" style="margin-bottom:0; font-size:0.82rem; border-collapse: collapse; min-width: 680px;">
                 <thead>
                   <!-- We will construct two-row headers: Semester 1 & Semester 2 -->
                 </thead>

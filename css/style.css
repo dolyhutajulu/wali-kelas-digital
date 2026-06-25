@@ -2276,3 +2276,23 @@ button, a, input, select, textarea, label, .quick-action-btn, .bottom-nav-item {
   font-weight: 700;
   color: var(--text-muted);
 }
+
+/* --- GRADE GRID: PH delete + weight popover --- */
+.ph-col-head { position: relative; }
+.ph-del-btn {
+  position: absolute; top: 2px; right: 2px;
+  background: none; border: none; color: var(--danger);
+  font-size: 0.62rem; cursor: pointer; padding: 2px; line-height: 1;
+}
+.weight-popover {
+  position: absolute; right: 0; top: calc(100% + 8px);
+  width: 240px; background: var(--bg-card); border: 1px solid var(--border-color);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-lg);
+  padding: 14px; z-index: 1000; display: flex; flex-direction: column; gap: 10px;
+}
+.weight-popover[hidden] { display: none; }
+.weight-popover h4 { font-size: 0.9rem; color: var(--primary); }
+.weight-popover label { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 0.85rem; font-weight: 600; }
+.weight-popover input { width: 80px; min-height: 40px; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); text-align: center; }
+.weight-total { font-size: 0.75rem; color: var(--text-muted); }
+.weight-popover-actions { display: flex; gap: 8px; justify-content: flex-end; }
