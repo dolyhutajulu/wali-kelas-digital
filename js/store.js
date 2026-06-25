@@ -5,15 +5,13 @@ const STORE_KEY = 'walikelas_digital_state';
 // Grade categories. Tugas & Ulangan Harian are MULTI-entry (averaged within
 // the category); UTS & UAS are SINGLE-entry (one value per subject).
 const GRADE_CATEGORIES = [
-  { id: 'tugas', name: 'Tugas', multi: true },
-  { id: 'uh', name: 'Ulangan Harian', multi: true },
-  { id: 'uts', name: 'UTS / STS', multi: false },
-  { id: 'uas', name: 'UAS / SAS', multi: false }
+  { id: 'ph', name: 'Penilaian Harian', multi: true },
+  { id: 'sas', name: 'Sumatif Akhir Semester (SAS)', multi: false }
 ];
 const GRADE_CATEGORY_IDS = GRADE_CATEGORIES.map(c => c.id);
 const SINGLE_CATEGORIES = GRADE_CATEGORIES.filter(c => !c.multi).map(c => c.id);
 // Default per-category weight (percentages, sum 100). Editable per subject.
-const DEFAULT_CATEGORY_WEIGHTS = { tugas: 30, uh: 20, uts: 20, uas: 30 };
+const DEFAULT_CATEGORY_WEIGHTS = { ph: 60, sas: 40 };
 
 // Default assessment components shared by every subject.
 // `category` maps the component to a grade category; `core: true` = undeletable.
@@ -768,19 +766,41 @@ class Store {
   // Returns the assessment components for a subject WITHOUT mutating state.
   // Custom components are merged on top of the core defaults so every subject
   // always has at least Tugas/Ulangan/UTS/UAS.
+  // Current semester id as a string ('1' or '2').
+  _currentSemester() {
+    return String(this.state.settings.semester || 1);
+  }
+
+  // Returns the stored component array for (subject, semester), seeding a default
+  // PH1,PH2,PH3,SAS list on first use. Mutates + persists only when it seeds.
+  _ensureSemesterAssessments(subjectId, semester) {
+    const subject = (this.state.settings.subjects || []).find(s => s.id === subjectId);
+    if (!subject) return [];
+    if (!subject.assessmentsBySemester) subject.assessmentsBySemester = {};
+    const sem = String(semester);
+    const existing = subject.assessmentsBySemester[sem];
+    if (!Array.isArray(existing) || existing.length === 0) {
+      subject.assessmentsBySemester[sem] = [
+        { id: `s${sem}_ph1`, name: 'PH1', category: 'ph', core: true },
+        { id: `s${sem}_ph2`, name: 'PH2', category: 'ph' },
+        { id: `s${sem}_ph3`, name: 'PH3', category: 'ph' },
+        { id: `s${sem}_sas`, name: 'SAS', category: 'sas', core: true }
+      ];
+      this.saveState();
+    }
+    return subject.assessmentsBySemester[sem];
+  }
+
+  // Components for the CURRENT semester. PH labels are normalized to position
+  // (PH1, PH2, ...) so deleting a middle PH never leaves a numbering gap.
   getSubjectAssessments(subjectId) {
-    const semester = this.state.settings.semester || 1;
-    const prefix = `s${semester}_`;
-    return [
-      { id: `${prefix}ph1`, name: 'Penilaian Harian 1 (PH1)', category: 'uh', core: true },
-      { id: `${prefix}re1`, name: 'Remedial PH1 (Re1)', category: 'uh', core: true },
-      { id: `${prefix}ph2`, name: 'Penilaian Harian 2 (PH2)', category: 'uh', core: true },
-      { id: `${prefix}re2`, name: 'Remedial PH2 (Re2)', category: 'uh', core: true },
-      { id: `${prefix}ph3`, name: 'Penilaian Harian 3 (PH3)', category: 'uh', core: true },
-      { id: `${prefix}re3`, name: 'Remedial PH3 (Re3)', category: 'uh', core: true },
-      { id: `${prefix}sas`, name: 'Sumatif Akhir Semester (SAS)', category: 'uas', core: true },
-      { id: `${prefix}resas`, name: 'Remedial SAS (ReSAS)', category: 'uas', core: true }
-    ];
+    const sem = this._currentSemester();
+    const list = this._ensureSemesterAssessments(subjectId, sem);
+    let phPos = 0;
+    return list.map(a => {
+      if (a.category === 'ph') { phPos += 1; return { ...a, name: `PH${phPos}` }; }
+      return { ...a, name: 'SAS' };
+    });
   }
 
   // Per-subject category weights (percentages). Falls back to defaults.
