@@ -1376,3 +1376,8 @@ class Store {
 // Attach globally
 window.WaliKelasStore = new Store();
 console.log('WaliKelasStore loaded');
+
+// Node test harness support (no effect in the browser).
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { Store };
+}
