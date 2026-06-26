@@ -1222,12 +1222,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const sem = btn.getAttribute('data-sem');
         const phId = btn.getAttribute('data-ph');
         const slot = store.getSubjectPhSlots(subjectId, sem).find(s => s.ph.id === phId);
-        const text = prompt('Deskripsi materi untuk PH ini:', slot ? slot.materi : '');
-        if (text !== null) {
-          store.setMateri(subjectId, sem, phId, text);
-          renderDynamicAssessments(containerId, subjectId, studentId, prefix);
-          renderGradeGrid();
-        }
+        promptInput({
+          title: 'Deskripsi Materi',
+          label: `Materi untuk ${slot ? slot.ph.name : 'PH'} · Semester ${sem}`,
+          value: slot ? slot.materi : '',
+          placeholder: 'Mis. Bilangan Bulat',
+          onSave: (text) => {
+            store.setMateri(subjectId, sem, phId, text);
+            renderDynamicAssessments(containerId, subjectId, studentId, prefix);
+            renderGradeGrid();
+          }
+        });
       };
     });
 
@@ -2592,6 +2597,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Reusable, styled single-line text input dialog. Replaces native prompt().
+  // opts: { title, label, value, placeholder, onSave(text) }
+  function promptInput(opts) {
+    const o = opts || {};
+    const titleEl = document.getElementById('input-prompt-title');
+    const labelEl = document.getElementById('input-prompt-label');
+    const field = document.getElementById('input-prompt-field');
+    const saveBtn = document.getElementById('input-prompt-save');
+    if (!field || !saveBtn) return;
+    titleEl.innerHTML = `<i class="fas fa-book"></i> ${o.title || 'Masukkan Teks'}`;
+    if (o.label) labelEl.textContent = o.label;
+    field.value = o.value || '';
+    field.placeholder = o.placeholder || '';
+    openModal('modal-input-prompt');
+    setTimeout(() => { field.focus(); field.select(); }, 60);
+
+    const submit = () => {
+      const val = field.value;
+      field.onkeydown = null;
+      closeModal('modal-input-prompt');
+      if (typeof o.onSave === 'function') o.onSave(val);
+    };
+    saveBtn.onclick = submit;
+    field.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } };
+  }
+
   // Reusable, styled confirmation dialog. Replaces native confirm().
   // opts: { title, message, summaryHtml, confirmLabel, danger, requireText, onConfirm }
   function confirmAction(opts) {
@@ -2917,8 +2948,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const sem = btn.getAttribute('data-sem');
         const phId = btn.getAttribute('data-ph');
         const slot = store.getSubjectPhSlots(SUBJ, sem).find(s => s.ph.id === phId);
-        const text = prompt('Deskripsi materi untuk kolom ini:', slot ? slot.materi : '');
-        if (text !== null) { store.setMateri(SUBJ, sem, phId, text); renderGradeGrid(); }
+        promptInput({
+          title: 'Deskripsi Materi',
+          label: `Materi untuk ${slot ? slot.ph.name : 'PH'} · Semester ${sem}`,
+          value: slot ? slot.materi : '',
+          placeholder: 'Mis. Bilangan Bulat',
+          onSave: (text) => { store.setMateri(SUBJ, sem, phId, text); renderGradeGrid(); }
+        });
       };
     });
 

@@ -1398,6 +1398,27 @@
     </div>
   </div>
 
+  <!-- MODAL: INPUT TEKS (reusable, mis. deskripsi materi) -->
+  <div id="modal-input-prompt" class="modal-overlay">
+    <div class="modal-content" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="input-prompt-title"><i class="fas fa-book"></i> Deskripsi Materi</h3>
+        <button class="modal-close" aria-label="Tutup"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="input-group">
+          <label id="input-prompt-label" for="input-prompt-field" style="font-size: 0.85rem; font-weight: 600;">Deskripsi materi untuk kolom ini</label>
+          <input type="text" id="input-prompt-field" autocomplete="off" maxlength="80" placeholder="Mis. Bilangan Bulat" style="width: 100%; min-height: 44px; padding: 10px 12px; border-radius: var(--radius-md); border: 1.5px solid var(--border-color); background: var(--bg-main); color: var(--text-main); font-size: 0.95rem;">
+          <p class="text-muted" style="font-size: 0.75rem; margin-top: 6px;">Kosongkan lalu Simpan untuk menghapus materi.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary modal-close">Batal</button>
+        <button type="button" id="input-prompt-save" class="btn btn-primary"><i class="fas fa-check"></i> Simpan</button>
+      </div>
+    </div>
+  </div>
+
   <!-- TOAST NOTIFICATION CONTAINER -->
   <div id="toast-container" class="toast-container"></div>
 
