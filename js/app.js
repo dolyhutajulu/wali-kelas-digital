@@ -389,6 +389,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderStudents() {
     const tableBody = document.getElementById('student-list-table-body');
     const searchVal = document.getElementById('search-student').value.toLowerCase();
+    const semLabelEl = document.getElementById('students-rata-sem-label');
+    if (semLabelEl) semLabelEl.textContent = `Semester ${store.state.settings.semester || 1}`;
     tableBody.innerHTML = '';
 
     const filtered = store.state.students.filter(student => 
@@ -1144,9 +1146,12 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  function renderDynamicAssessments(containerId, subjectId, studentId, prefix) {
+  // semesters: optional array of semester ids to render (default both). The quick
+  // grade modal passes only the active semester to stay compact.
+  function renderDynamicAssessments(containerId, subjectId, studentId, prefix, semesters) {
     const container = document.getElementById(containerId);
     if (!container) return;
+    const semList = (Array.isArray(semesters) && semesters.length) ? semesters.map(String) : ['1', '2'];
 
     if (!subjectId) {
       container.innerHTML = `<div class="text-muted text-center" style="grid-column: 1/-1; padding: 10px;">Pilih mata pelajaran untuk memuat komponen nilai.</div>`;
@@ -1168,7 +1173,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     let html = '';
-    ['1', '2'].forEach(sem => {
+    semList.forEach(sem => {
       const slots = store.getSubjectPhSlots(subjectId, sem);
       const pair = store.getSubjectSasPair(subjectId, sem);
       html += `<div class="ps-sem-block"><div class="ps-sem-title">SEMESTER ${sem}</div>`;
@@ -1188,7 +1193,7 @@ document.addEventListener('DOMContentLoaded', () => {
     container.innerHTML = html;
 
     const updatePreviews = () => {
-      ['1', '2'].forEach(sem => {
+      semList.forEach(sem => {
         const r = store.getSubjectSemesterAverage(studentId, subjectId, sem);
         const el = document.getElementById(`${prefix}-rapor-${sem}`);
         if (el) el.textContent = r === null ? '-' : r;
@@ -1211,7 +1216,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const res = store.addPhComponent(subjectId, sem);
         if (res.success) {
           window.showToast(`${res.component.name} Sem ${sem} ditambahkan.`, 'success');
-          renderDynamicAssessments(containerId, subjectId, studentId, prefix);
+          renderDynamicAssessments(containerId, subjectId, studentId, prefix, semList);
           renderGradeGrid();
         }
       };
@@ -1229,7 +1234,7 @@ document.addEventListener('DOMContentLoaded', () => {
           placeholder: 'Mis. Bilangan Bulat',
           onSave: (text) => {
             store.setMateri(subjectId, sem, phId, text);
-            renderDynamicAssessments(containerId, subjectId, studentId, prefix);
+            renderDynamicAssessments(containerId, subjectId, studentId, prefix, semList);
             renderGradeGrid();
           }
         });
@@ -2465,10 +2470,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
 
-      alert('Nilai mata pelajaran berhasil disimpan!');
+      window.showToast('Nilai tersimpan.', 'success');
       closeModal('modal-quick-grade');
       renderStudents();
       renderGradesRecap();
+      renderGradeGrid();
     };
 
     // QUICK SAVING FORM SUBMIT
@@ -2742,20 +2748,28 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('quick-grade-student-id').value = studentId;
     document.getElementById('quick-grade-student-name').innerText = student.name;
 
-    // Load existing grades if any for default subject
-    const defaultSubj = (store.state.settings.subjects && store.state.settings.subjects.length > 0) 
-      ? store.state.settings.subjects[0].id 
+    // Keep the subject dropdown in sync with the real subject list.
+    populateSubjectDropdowns();
+
+    // Quick modal edits only the ACTIVE semester (stays compact); both semesters
+    // are editable in the "Input Per Siswa" tab. Title shows which semester.
+    const sem = String(store.state.settings.semester || 1);
+    const titleEl = document.getElementById('quick-grade-modal-title');
+    if (titleEl) titleEl.innerHTML = `<i class="fas fa-award"></i> Input Nilai Cepat · Semester ${sem}`;
+
+    const defaultSubj = (store.state.settings.subjects && store.state.settings.subjects.length > 0)
+      ? store.state.settings.subjects[0].id
       : 'matematika';
-    
+
     document.getElementById('quick-grade-subject').value = defaultSubj;
-    renderDynamicAssessments('quick-grade-inputs-container', defaultSubj, studentId, 'quick-grade');
+    renderDynamicAssessments('quick-grade-inputs-container', defaultSubj, studentId, 'quick-grade', [sem]);
 
     // Bind change listener for subject select
     document.getElementById('quick-grade-subject').onchange = (e) => {
       if (e.target.value === 'add_new_subject') {
         handleAddNewSubject(e.target);
       } else {
-        renderDynamicAssessments('quick-grade-inputs-container', e.target.value, studentId, 'quick-grade');
+        renderDynamicAssessments('quick-grade-inputs-container', e.target.value, studentId, 'quick-grade', [sem]);
       }
     };
 
@@ -2763,7 +2777,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function loadQuickGradeSubjectData(studentId, subject) {
-    renderDynamicAssessments('quick-grade-inputs-container', subject, studentId, 'quick-grade');
+    const sem = String(store.state.settings.semester || 1);
+    renderDynamicAssessments('quick-grade-inputs-container', subject, studentId, 'quick-grade', [sem]);
   }
 
   // --- QUICK SAVING MODAL FUNCTIONALITY ---
