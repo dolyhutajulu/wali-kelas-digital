@@ -770,8 +770,35 @@ class Store {
       list.push({ id: `s${sem}_resas`, name: 'ReSAS', category: 'resas' });
       subject.assessmentsBySemester[sem] = list;
       this.saveState();
+      return list;
     }
-    return subject.assessmentsBySemester[sem];
+
+    // Migrate legacy lists (PH+SAS only) → ensure each PH has a paired Re and
+    // that a ReSAS exists. Idempotent: only rewrites/persists when something is missing.
+    const list = existing;
+    const phs = list.filter(a => a.category === 'ph');
+    const hasAllRe = phs.every(ph => list.some(a => a.id === ph.id.replace('_ph', '_re')));
+    const hasResas = list.some(a => a.category === 'resas');
+    if (hasAllRe && hasResas) return list;
+
+    const rebuilt = [];
+    phs.forEach(ph => {
+      rebuilt.push(ph);
+      const reId = ph.id.replace('_ph', '_re');
+      const re = list.find(a => a.category === 're' && a.id === reId)
+        || { id: reId, name: 'Re', category: 're' };
+      rebuilt.push(re);
+    });
+    const sasComp = list.find(a => a.category === 'sas')
+      || { id: `s${sem}_sas`, name: 'SAS', category: 'sas', core: true };
+    rebuilt.push(sasComp);
+    const resas = list.find(a => a.category === 'resas')
+      || { id: `s${sem}_resas`, name: 'ReSAS', category: 'resas' };
+    rebuilt.push(resas);
+
+    subject.assessmentsBySemester[sem] = rebuilt;
+    this.saveState();
+    return rebuilt;
   }
 
   // Components for a semester (defaults to current). PH/Re labels are normalized

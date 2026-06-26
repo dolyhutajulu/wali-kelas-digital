@@ -2538,17 +2538,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // QUICK GRADE FORM SUBMIT
     document.getElementById('quick-grade-form').onsubmit = (e) => {
       e.preventDefault();
-      const studentId = document.getElementById('quick-grade-student-id').value;
-      const subject = document.getElementById('quick-grade-subject').value;
-      
-      const assessments = store.getSubjectAssessments(subject);
-      assessments.forEach(a => {
-        const input = document.getElementById(`quick-grade-${a.id}`);
-        if (input) {
-          store.saveGrade(studentId, subject, a.id, input.value);
-        }
+      // Values are already auto-saved on change (per component id, any semester).
+      // Persist any field still focused, then close.
+      document.querySelectorAll('#quick-grade-inputs-container .ps-grade-input').forEach(inp => {
+        store.saveGrade(inp.getAttribute('data-student'), inp.getAttribute('data-subject'), inp.getAttribute('data-comp'), inp.value);
       });
-
       window.showToast('Nilai tersimpan.', 'success');
       closeModal('modal-quick-grade');
       renderStudents();
@@ -2830,28 +2824,44 @@ document.addEventListener('DOMContentLoaded', () => {
     // Keep the subject dropdown in sync with the real subject list.
     populateSubjectDropdowns();
 
-    // Quick modal edits only the ACTIVE semester (stays compact); both semesters
-    // are editable in the "Input Per Siswa" tab. Title shows which semester.
-    const sem = String(store.state.settings.semester || 1);
+    // Quick modal edits ONE semester at a time (compact), selectable via the
+    // segmented toggle. Defaults to the active semester.
+    let selectedSem = String(store.state.settings.semester || 1);
     const titleEl = document.getElementById('quick-grade-modal-title');
-    if (titleEl) titleEl.innerHTML = `<i class="fas fa-award"></i> Input Nilai Cepat · Semester ${sem}`;
+    const semToggle = document.getElementById('quick-grade-semester');
 
     const defaultSubj = (store.state.settings.subjects && store.state.settings.subjects.length > 0)
       ? store.state.settings.subjects[0].id
       : 'matematika';
-
     document.getElementById('quick-grade-subject').value = defaultSubj;
-    renderDynamicAssessments('quick-grade-inputs-container', defaultSubj, studentId, 'quick-grade', [sem]);
 
-    // Bind change listener for subject select
+    const renderQuick = () => {
+      const subj = document.getElementById('quick-grade-subject').value;
+      if (titleEl) titleEl.innerHTML = `<i class="fas fa-award"></i> Input Nilai Cepat · Semester ${selectedSem}`;
+      if (semToggle) {
+        semToggle.querySelectorAll('button').forEach(b =>
+          b.classList.toggle('active', b.getAttribute('data-sem') === selectedSem));
+      }
+      renderDynamicAssessments('quick-grade-inputs-container', subj, studentId, 'quick-grade', [selectedSem]);
+    };
+
+    // Semester toggle
+    if (semToggle) {
+      semToggle.querySelectorAll('button').forEach(btn => {
+        btn.onclick = () => { selectedSem = btn.getAttribute('data-sem'); renderQuick(); };
+      });
+    }
+
+    // Subject change
     document.getElementById('quick-grade-subject').onchange = (e) => {
       if (e.target.value === 'add_new_subject') {
         handleAddNewSubject(e.target);
       } else {
-        renderDynamicAssessments('quick-grade-inputs-container', e.target.value, studentId, 'quick-grade', [sem]);
+        renderQuick();
       }
     };
 
+    renderQuick();
     openModal('modal-quick-grade');
   }
 

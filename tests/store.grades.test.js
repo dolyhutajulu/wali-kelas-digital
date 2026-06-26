@@ -110,6 +110,29 @@ test('setMateri persists per slot and is independent per semester', () => {
   assert.strictEqual(slot2.materi, '');
 });
 
+test('legacy PH-only list migrates to include paired Re + ReSAS', () => {
+  const store = freshStore();
+  const subjectId = store.getSubjects()[0].id;
+  // Simulate a legacy stored list seeded before remedial existed.
+  const subj = store.state.settings.subjects.find(s => s.id === subjectId);
+  subj.assessmentsBySemester = {
+    '1': [
+      { id: 's1_ph1', name: 'PH1', category: 'ph', materi: 'X', core: true },
+      { id: 's1_ph2', name: 'PH2', category: 'ph' },
+      { id: 's1_sas', name: 'SAS', category: 'sas', core: true }
+    ]
+  };
+  const comps = store.getSubjectAssessments(subjectId, 1);
+  const ids = comps.map(c => c.id);
+  assert.ok(ids.includes('s1_re1') && ids.includes('s1_re2'), 'paired Re added');
+  assert.ok(ids.includes('s1_resas'), 'ReSAS added');
+  // PH materi preserved
+  assert.strictEqual(comps.find(c => c.id === 's1_ph1').materi, 'X');
+  // slots now expose remedial
+  const slot = store.getSubjectPhSlots(subjectId, 1).find(s => s.ph.id === 's1_ph1');
+  assert.ok(slot.re && slot.re.id === 's1_re1');
+});
+
 test('getSubjectSemesterAverage computes each semester independently', () => {
   const store = freshStoreWithStudent();
   const subjectId = store.getSubjects()[0].id;
