@@ -879,13 +879,41 @@
 
           <!-- Tab 2: Galeri Kegiatan -->
           <div id="tab-comm-gallery" class="tab-content-panel">
-            <div class="card" style="margin-bottom: 20px;">
-              <h4><i class="fas fa-images"></i> Galeri Dokumentasi Kegiatan Belajar</h4>
-              <p class="text-muted" style="font-size: 0.85rem;">Sebagai dokumentasi wali kelas untuk memperlihatkan keaktifan belajar siswa kepada wali murid.</p>
-            </div>
-            
+            <form id="gallery-form" class="card" style="margin-bottom: 20px;">
+              <h4 style="color:var(--primary); margin-bottom: 4px;"><i class="fas fa-camera-retro"></i> Unggah Foto Kegiatan</h4>
+              <p class="text-muted" style="font-size: 0.82rem; margin-bottom: 15px;">Foto otomatis dikompres sebelum diunggah ke penyimpanan cloud. Dokumentasi keaktifan belajar siswa.</p>
+              <div class="form-row">
+                <div class="input-group">
+                  <label for="gallery-title">JUDUL KEGIATAN</label>
+                  <input type="text" id="gallery-title" placeholder="Contoh: Belajar Kelompok IPA" required>
+                </div>
+                <div class="input-group">
+                  <label for="gallery-tag">KATEGORI</label>
+                  <select id="gallery-tag">
+                    <option>Pelajaran</option>
+                    <option>Piket</option>
+                    <option>Eskul</option>
+                    <option>Prestasi</option>
+                    <option>Acara</option>
+                  </select>
+                </div>
+                <div class="input-group">
+                  <label for="gallery-date">TANGGAL</label>
+                  <input type="date" id="gallery-date" required>
+                </div>
+              </div>
+              <div class="input-group" style="margin-bottom: 12px;">
+                <label for="gallery-file">FOTO KEGIATAN</label>
+                <input type="file" id="gallery-file" accept="image/*" capture="environment" required>
+              </div>
+              <label style="display:flex; align-items:center; gap:8px; font-size:0.84rem; margin-bottom:16px; cursor:pointer;">
+                <input type="checkbox" id="gallery-show-parent" style="width:16px; height:16px;"> Tandai "Tampilkan ke Wali" (untuk galeri wali — fitur menyusul)
+              </label>
+              <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Unggah Foto</button>
+            </form>
+
             <div id="gallery-list-container" class="gallery-grid">
-              <!-- Static simulations loaded by JS -->
+              <!-- Loaded dynamically by JS -->
             </div>
           </div>
 

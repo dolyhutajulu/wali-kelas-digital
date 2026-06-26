@@ -46,7 +46,8 @@ const INITIAL_STATE = {
     },
     calendar: [] // [ { id, date, title, type: 'holiday'|'exam'|'event' } ]
   },
-  announcements: [] // [ { id, date, title, content } ]
+  announcements: [], // [ { id, date, title, content } ]
+  gallery: [] // [ { id, title, tag, date, url, path, showToParent, createdAt } ]
 };
 
 // Rich Demo Data (Indonesian School Context)
@@ -460,7 +461,8 @@ class Store {
     if (!state.character) state.character = {};
     if (!state.savings) state.savings = {};
     if (!state.classCash) state.classCash = { balance: 0, history: [] };
-    
+    if (!Array.isArray(state.gallery)) state.gallery = [];
+
     return state;
   }
 
@@ -1278,6 +1280,68 @@ class Store {
   deleteAnnouncement(id) {
     this.state.announcements = this.state.announcements.filter(a => a.id !== id);
     this.saveState();
+  }
+
+  // GALLERY (foto kegiatan) — metadata in synced state, images in Supabase Storage.
+  isCloudReady() {
+    return !!supabaseClient;
+  }
+
+  getGallery() {
+    return (this.state.gallery || []).slice().sort((a, b) =>
+      (b.date || '').localeCompare(a.date || '') ||
+      (b.createdAt || '').localeCompare(a.createdAt || '')
+    );
+  }
+
+  // Upload a (already compressed) image blob to Supabase Storage.
+  // Returns { success, url, path } or { success:false, error }.
+  async uploadGalleryPhoto(blob, ext) {
+    if (!supabaseClient) {
+      return { success: false, error: 'Penyimpanan cloud (Supabase) belum aktif.' };
+    }
+    const safeExt = (ext || 'jpg').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'jpg';
+    const cls = (this.state.settings.className || 'kelas').replace(/[^a-z0-9]/gi, '-').toLowerCase();
+    const path = `${cls}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${safeExt}`;
+    const { error } = await supabaseClient.storage.from('kegiatan').upload(path, blob, {
+      contentType: blob.type || 'image/jpeg',
+      upsert: false
+    });
+    if (error) {
+      return { success: false, error: error.message || 'Gagal mengunggah foto ke cloud.' };
+    }
+    const { data } = supabaseClient.storage.from('kegiatan').getPublicUrl(path);
+    return { success: true, url: data.publicUrl, path };
+  }
+
+  addGalleryItem({ title, tag, date, url, path, showToParent }) {
+    if (!Array.isArray(this.state.gallery)) this.state.gallery = [];
+    const item = {
+      id: 'gal_' + Date.now(),
+      title: (title || 'Kegiatan').trim(),
+      tag: tag || 'Kegiatan',
+      date: date || new Date().toISOString().split('T')[0],
+      url: url || '',
+      path: path || '',
+      showToParent: !!showToParent,
+      createdAt: new Date().toISOString()
+    };
+    this.state.gallery.unshift(item);
+    this.saveState();
+    return item;
+  }
+
+  async deleteGalleryItem(id) {
+    const list = this.state.gallery || [];
+    const idx = list.findIndex(g => g.id === id);
+    if (idx === -1) return { success: false };
+    const item = list[idx];
+    if (supabaseClient && item.path) {
+      try { await supabaseClient.storage.from('kegiatan').remove([item.path]); } catch (e) { /* best-effort */ }
+    }
+    list.splice(idx, 1);
+    this.saveState();
+    return { success: true };
   }
 }
 

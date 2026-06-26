@@ -1605,24 +1605,51 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Resize + compress an image File to a JPEG Blob (max edge ~1280px).
+  function compressImage(file, maxDim = 1280, quality = 0.8) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        let { width, height } = img;
+        if (width >= height && width > maxDim) { height = Math.round(height * maxDim / width); width = maxDim; }
+        else if (height > width && height > maxDim) { width = Math.round(width * maxDim / height); height = maxDim; }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        canvas.toBlob(b => b ? resolve(b) : reject(new Error('Kompresi gambar gagal.')), 'image/jpeg', quality);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('File bukan gambar yang valid.')); };
+      img.src = url;
+    });
+  }
+
   function renderGalleryList() {
     const container = document.getElementById('gallery-list-container');
+    if (!container) return;
+
+    // Default the date field to today.
+    const dateEl = document.getElementById('gallery-date');
+    if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().split('T')[0];
+
+    const items = store.getGallery();
+    if (items.length === 0) {
+      container.innerHTML = `<div class="text-muted text-center" style="grid-column:1/-1; padding:32px 16px;">
+        <i class="fas fa-images" style="font-size:2.2rem; opacity:0.35;"></i>
+        <p style="margin-top:10px;">Belum ada foto kegiatan. Unggah foto pertama lewat form di atas.</p>
+      </div>`;
+      return;
+    }
+
     container.innerHTML = '';
-
-    // Static simulations of photos for demo purposes
-    const mockPhotos = [
-      { id: 'gal_1', title: 'Belajar Kelompok IPA', date: '2026-06-22', type: 'color1', tag: 'Pelajaran' },
-      { id: 'gal_2', title: 'Kebersihan Kelas Jumsih', date: '2026-06-19', type: 'color2', tag: 'Piket' },
-      { id: 'gal_3', title: 'Latihan Pramuka Siaga', date: '2026-06-12', type: 'color3', tag: 'Eskul' },
-      { id: 'gal_4', title: 'Juara Kelas Lomba Mewarnai', date: '2026-06-05', type: 'color4', tag: 'Prestasi' }
-    ];
-
-    mockPhotos.forEach(p => {
+    items.forEach(p => {
       const card = document.createElement('div');
-      card.className = `gallery-card ${p.type}`;
+      card.className = 'gallery-card';
       card.innerHTML = `
-        <div class="gallery-img-placeholder">
-          <i class="fas fa-camera"></i>
+        <div class="gallery-img" style="background-image:url('${p.url}')">
+          ${p.showToParent ? '<span class="gallery-parent-flag" title="Tampil ke wali"><i class="fas fa-eye"></i></span>' : ''}
+          <button type="button" class="gallery-del-btn" data-id="${p.id}" title="Hapus foto" aria-label="Hapus foto"><i class="fas fa-trash"></i></button>
         </div>
         <div class="gallery-info">
           <span class="gallery-tag">${p.tag}</span>
@@ -1630,6 +1657,18 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="gallery-date">${formatDate(p.date)}</div>
         </div>
       `;
+      card.querySelector('.gallery-del-btn').onclick = () => {
+        confirmAction({
+          title: 'Hapus Foto Kegiatan',
+          message: 'Hapus foto ini secara permanen dari galeri dan penyimpanan cloud?',
+          confirmLabel: 'Hapus',
+          onConfirm: async () => {
+            await store.deleteGalleryItem(p.id);
+            window.showToast('Foto dihapus.', 'success');
+            renderGalleryList();
+          }
+        });
+      };
       container.appendChild(card);
     });
   }
@@ -2320,6 +2359,46 @@ document.addEventListener('DOMContentLoaded', () => {
       renderAnnouncementsList();
       renderDashboard();
     };
+
+    // GALLERY UPLOAD SUBMIT
+    const galleryForm = document.getElementById('gallery-form');
+    if (galleryForm) {
+      galleryForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const fileInput = document.getElementById('gallery-file');
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) { window.showToast('Pilih foto kegiatan dahulu.', 'error'); return; }
+        if (!store.isCloudReady()) {
+          window.showToast('Penyimpanan cloud (Supabase) belum aktif. Foto butuh cloud agar bisa dibagikan.', 'error');
+          return;
+        }
+        const submitBtn = galleryForm.querySelector('button[type="submit"]');
+        const original = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengompres & mengunggah...';
+        try {
+          const blob = await compressImage(file);
+          const up = await store.uploadGalleryPhoto(blob, 'jpg');
+          if (!up.success) { window.showToast(up.error, 'error'); return; }
+          store.addGalleryItem({
+            title: document.getElementById('gallery-title').value,
+            tag: document.getElementById('gallery-tag').value,
+            date: document.getElementById('gallery-date').value,
+            url: up.url,
+            path: up.path,
+            showToParent: document.getElementById('gallery-show-parent').checked
+          });
+          galleryForm.reset();
+          window.showToast('Foto kegiatan berhasil diunggah.', 'success');
+          renderGalleryList();
+        } catch (err) {
+          window.showToast(err.message || 'Gagal mengunggah foto.', 'error');
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = original;
+        }
+      };
+    }
 
     // BROADCAST / LAPORAN PERSONAL SUBMIT
     document.getElementById('broadcast-form').onsubmit = (e) => {

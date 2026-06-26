@@ -2514,3 +2514,51 @@ button, a, input, select, textarea, label, .quick-action-btn, .bottom-nav-item {
     font-size: 0.82rem;
   }
 }
+
+/* --- GALLERY: real photo thumbnails + controls --- */
+.gallery-img {
+  position: relative;
+  height: 170px;
+  background-size: cover;
+  background-position: center;
+  background-color: var(--bg-main);
+}
+.gallery-del-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: rgba(15, 23, 42, 0.55);
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.8rem;
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+.gallery-card:hover .gallery-del-btn { opacity: 1; }
+.gallery-del-btn:hover { background: var(--danger); }
+.gallery-parent-flag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 4px 9px;
+  border-radius: var(--radius-full);
+  background: rgba(16, 185, 129, 0.92);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+/* On touch devices show the delete affordance (no hover) */
+@media (hover: none) {
+  .gallery-del-btn { opacity: 1; }
+}
