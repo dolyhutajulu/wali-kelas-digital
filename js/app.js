@@ -440,7 +440,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tr.innerHTML = `
         <td data-label="Pilih" style="text-align:center;"><input type="checkbox" class="student-select-cb" ${isSelected ? 'checked' : ''} style="cursor:pointer;"></td>
         <td data-label="No">${idx + 1}</td>
-        <td data-label="Nama Murid" data-gender="${student.gender}" data-nis="${student.nis || '-'}">
+        <td data-label="Nama Murid" data-no="${idx + 1}" data-gender="${student.gender}" data-nis="${student.nis || '-'}" data-att="${attPercent}">
           <div style="display: flex; align-items: center; gap: 10px;">
             <div class="student-card-avatar ${isFemale ? 'female' : ''}" style="width: 32px; height: 32px; font-size: 0.85rem; flex-shrink: 0;">
               ${student.name.charAt(0)}
@@ -1024,13 +1024,13 @@ document.addEventListener('DOMContentLoaded', () => {
       
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${index + 1}</td>
-        <td><strong>${student.name}</strong></td>
-        <td class="text-center">${summary.hadir}</td>
-        <td class="text-center">${summary.sakit}</td>
-        <td class="text-center">${summary.izin}</td>
-        <td class="text-center">${summary.alfa}</td>
-        <td class="text-center"><strong>${summary.percentage}%</strong></td>
+        <td data-label="No">${index + 1}</td>
+        <td data-label="Nama"><strong>${student.name}</strong></td>
+        <td data-label="Hadir" class="text-center">${summary.hadir}</td>
+        <td data-label="Sakit" class="text-center">${summary.sakit}</td>
+        <td data-label="Izin" class="text-center">${summary.izin}</td>
+        <td data-label="Alfa" class="text-center">${summary.alfa}</td>
+        <td data-label="Persentase" class="text-center"><strong>${summary.percentage}%</strong></td>
       `;
       recapBody.appendChild(tr);
     });
@@ -1312,11 +1312,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const prefix = tx.type === 'in' ? '+' : '-';
 
       tr.innerHTML = `
-        <td>${formatDate(tx.date)}</td>
-        <td>${typeBadge}</td>
-        <td>${tx.note}</td>
-        <td style="${colorStyle}">${prefix}${formatRupiah(tx.amount)}</td>
-        <td>
+        <td data-label="Tanggal">${formatDate(tx.date)}</td>
+        <td data-label="Jenis">${typeBadge}</td>
+        <td data-label="Keterangan">${tx.note}</td>
+        <td data-label="Jumlah" style="${colorStyle}">${prefix}${formatRupiah(tx.amount)}</td>
+        <td data-label="Aksi">
           <button class="btn btn-secondary delete-cash-tx" data-id="${tx.id}" style="padding: 4px 8px;"><i class="fas fa-trash"></i></button>
         </td>
       `;
@@ -1348,10 +1348,10 @@ document.addEventListener('DOMContentLoaded', () => {
       
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${index + 1}</td>
-        <td><strong>${student.name}</strong></td>
-        <td>${formatRupiah(sav.balance)}</td>
-        <td>
+        <td data-label="No">${index + 1}</td>
+        <td data-label="Nama"><strong>${student.name}</strong></td>
+        <td data-label="Saldo">${formatRupiah(sav.balance)}</td>
+        <td data-label="Aksi">
           <button class="btn btn-primary view-savings-tx" data-id="${student.id}" style="padding: 4px 8px;"><i class="fas fa-history"></i> Riwayat</button>
         </td>
       `;

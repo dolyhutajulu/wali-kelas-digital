@@ -4,6 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>WaliKelas Digital - Sistem Informasi Wali Kelas SD/MI</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f766e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="WaliKelas">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+
   <!-- Google Fonts & FontAwesome -->
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -285,7 +296,7 @@
             </div>
 
             <div class="table-wrapper">
-              <table class="table-custom">
+              <table class="table-custom cards-sm">
                 <thead>
                   <tr>
                     <th style="width: 50px;">No</th>
@@ -569,7 +580,7 @@
 
               <!-- Recap table -->
               <div class="table-wrapper">
-                <table class="table-custom">
+                <table class="table-custom cards-sm">
                   <thead>
                     <tr>
                       <th style="width: 50px;">No</th>
@@ -635,7 +646,7 @@
 
               <!-- Ledger -->
               <div class="table-wrapper">
-                <table class="table-custom">
+                <table class="table-custom cards-sm">
                   <thead>
                     <tr>
                       <th>Tanggal</th>
@@ -1427,5 +1438,14 @@
   <!-- Core Stores & Logic scripts -->
   <script src="js/store.js"></script>
   <script src="js/app.js"></script>
+
+  <!-- PWA: register service worker for offline app shell -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch((err) => console.warn('SW registration failed:', err));
+      });
+    }
+  </script>
 </body>
 </html>

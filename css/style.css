@@ -1406,30 +1406,29 @@ h1, h2, h3, h4, h5, h6 {
     grid-template-columns: 1fr;
   }
 
-  /* Buku Induk table → Compact Directory List on mobile */
-  #students .table-custom thead {
-    display: none;
-  }
+  /* Buku Induk table → Stacked Directory Card on mobile */
+  #students .table-custom thead { display: none; }
   #students .table-custom,
-  #students .table-custom tbody {
-    display: block;
-    width: 100%;
-  }
+  #students .table-custom tbody { display: block; width: 100%; }
   #students .table-custom tr {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas:
+      "check name nilai"
+      "pres  pres tab";
     align-items: center;
-    justify-content: space-between;
-    padding: 10px 12px;
-    margin-bottom: 8px;
+    column-gap: 10px;
+    row-gap: 10px;
+    padding: 12px;
+    margin-bottom: 10px;
     background: var(--bg-card);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
-    gap: 8px;
     box-sizing: border-box;
   }
-  
-  /* Hide unnecessary columns on mobile list */
+
+  /* Hidden columns on the mobile card */
   #students .table-custom td[data-label="No"],
   #students .table-custom td[data-label="NIS / NISN"],
   #students .table-custom td[data-label="L/P"],
@@ -1438,92 +1437,93 @@ h1, h2, h3, h4, h5, h6 {
     display: none !important;
   }
 
-  /* Style visible columns */
   #students .table-custom td {
-    display: block;
     padding: 0 !important;
     border: none !important;
     background: none !important;
-    width: auto !important;
     text-align: left !important;
   }
 
-  /* Checkbox column */
+  /* Checkbox */
   #students .table-custom td[data-label="Pilih"] {
+    grid-area: check;
     display: flex !important;
     align-items: center;
     justify-content: center;
-    flex-shrink: 0;
   }
+  #students .table-custom td[data-label="Pilih"] input { width: 18px; height: 18px; }
 
-  /* Name & Avatar column */
+  /* Name + avatar + meta line */
   #students .table-custom td[data-label="Nama Murid"] {
-    display: block !important;
-    flex-grow: 1;
-    min-width: 0; /* Allow text truncate */
+    grid-area: name;
+    min-width: 0;
   }
   #students .table-custom td[data-label="Nama Murid"] .student-name-btn {
-    font-size: 0.95rem;
-    font-weight: 600;
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.25;
     text-align: left;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow: visible;
     display: block;
-    max-width: 130px;
     border: none;
     background: none;
     padding: 0;
-    color: var(--text-color);
+    color: var(--text-main);
     cursor: pointer;
   }
   #students .table-custom td[data-label="Nama Murid"]::after {
-    content: attr(data-gender) " · NIS: " attr(data-nis);
+    content: "No." attr(data-no) " · " attr(data-gender) " · Hadir " attr(data-att) " · NIS " attr(data-nis);
     display: block;
     font-size: 0.72rem;
     color: var(--text-muted);
-    margin-top: 2px;
-    margin-left: 42px; /* aligns with name text since avatar width is 32px + 10px gap */
+    margin-top: 3px;
+    margin-left: 42px; /* aligns under the name (avatar 32px + 10px gap) */
   }
 
-  /* Attendance button group */
-  #students .table-custom td[data-label="Presensi Hari Ini"] {
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-  /* Hide inactive buttons if there is an active one */
-  #students .table-custom td[data-label="Presensi Hari Ini"] .attendance-button-group:has(.active) .attendance-btn:not(.active) {
-    display: none !important;
-  }
-
-  /* Tabungan button */
-  #students .table-custom td[data-label="Tabungan"] {
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-  #students .table-custom td[data-label="Tabungan"] button {
-    font-size: 0.75rem !important;
-    padding: 4px 8px !important;
-    background: var(--bg-body) !important;
-    border: 1px solid var(--border-color) !important;
-    border-radius: var(--radius-sm);
-  }
-
-  /* Rata Nilai button */
+  /* Rata Nilai badge (top-right, tap to edit) */
   #students .table-custom td[data-label="Rata Nilai"] {
+    grid-area: nilai;
     display: flex !important;
     align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
+    justify-content: flex-end;
   }
   #students .table-custom td[data-label="Rata Nilai"] button {
-    font-size: 0.75rem !important;
-    padding: 4px 8px !important;
-    border-radius: var(--radius-sm);
+    font-size: 0.9rem !important;
+    font-weight: 700;
+    padding: 6px 14px !important;
+    min-height: 38px;
+    border-radius: var(--radius-full);
+  }
+
+  /* Presensi row (second line, left) */
+  #students .table-custom td[data-label="Presensi Hari Ini"] {
+    grid-area: pres;
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+  #students .table-custom td[data-label="Presensi Hari Ini"] .attendance-btn.mini {
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 0.82rem !important;
+  }
+
+  /* Tabungan (second line, right) */
+  #students .table-custom td[data-label="Tabungan"] {
+    grid-area: tab;
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  #students .table-custom td[data-label="Tabungan"] button {
+    font-size: 0.8rem !important;
+    padding: 6px 12px !important;
+    min-height: 38px;
+    background: var(--bg-main) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: var(--radius-full);
   }
 }
 
@@ -2331,3 +2331,186 @@ button, a, input, select, textarea, label, .quick-action-btn, .bottom-nav-item {
 .ps-materi-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--primary-light); color: var(--primary); border: 1px dashed var(--primary); border-radius: var(--radius-full); padding: 4px 12px; font-size: 0.78rem; font-weight: 600; cursor: pointer; margin-bottom: 8px; max-width: 100%; }
 .ps-materi-btn:hover { filter: brightness(0.97); }
 .ps-add-ph { margin: 4px 0 12px; }
+
+/* ============================================================
+   BUKU INDUK — PREMIUM MOBILE CARD POLISH
+   ============================================================ */
+@media (max-width: 768px) {
+  #students .table-custom tr {
+    padding: 16px;
+    border: none;
+    border-radius: 20px;
+    background: linear-gradient(180deg, #ffffff 0%, #fcfdfe 100%);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 18px -10px rgba(15, 23, 42, 0.16);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
+    row-gap: 14px;
+  }
+  #students .table-custom tr:active {
+    transform: scale(0.99);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 3px 10px -6px rgba(15, 23, 42, 0.12);
+  }
+
+  /* Premium avatar: gradient fill + soft ring */
+  #students .table-custom .student-card-avatar {
+    width: 46px !important;
+    height: 46px !important;
+    font-size: 1.05rem !important;
+    color: #fff !important;
+    background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%) !important;
+    box-shadow: 0 4px 10px -2px rgba(15, 118, 110, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    border: 2px solid #fff;
+  }
+  #students .table-custom .student-card-avatar.female {
+    background: linear-gradient(135deg, #e11d48 0%, #fb7185 100%) !important;
+    box-shadow: 0 4px 10px -2px rgba(225, 29, 72, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+
+  /* Name + meta refinement */
+  #students .table-custom td[data-label="Nama Murid"] > div { gap: 12px; }
+  #students .table-custom td[data-label="Nama Murid"] .student-name-btn {
+    font-size: 1.02rem;
+    letter-spacing: -0.01em;
+    color: #0f172a;
+  }
+  #students .table-custom td[data-label="Nama Murid"]::after {
+    margin-left: 58px; /* avatar 46 + gap 12 */
+    font-size: 0.7rem;
+    letter-spacing: 0.01em;
+    color: #94a3b8;
+    font-weight: 500;
+  }
+
+  /* Hairline divider before the action row */
+  #students .table-custom td[data-label="Presensi Hari Ini"],
+  #students .table-custom td[data-label="Tabungan"] {
+    border-top: 1px solid #f1f5f9 !important;
+    padding-top: 12px !important;
+  }
+
+  /* Premium segmented attendance pills */
+  #students .table-custom td[data-label="Presensi Hari Ini"] { gap: 6px; }
+  #students .table-custom .attendance-btn.mini {
+    width: 38px !important;
+    height: 38px !important;
+    border-radius: 12px !important;
+    border: 1.5px solid #e2e8f0 !important;
+    background: #f8fafc !important;
+    color: #64748b !important;
+    font-weight: 700 !important;
+    transition: all 0.15s ease;
+  }
+  #students .table-custom .attendance-btn.mini.h.active { background: var(--success) !important; border-color: transparent !important; color: #fff !important; box-shadow: 0 4px 10px -3px rgba(16, 185, 129, 0.45); }
+  #students .table-custom .attendance-btn.mini.s.active { background: var(--info) !important; border-color: transparent !important; color: #fff !important; box-shadow: 0 4px 10px -3px rgba(59, 130, 246, 0.45); }
+  #students .table-custom .attendance-btn.mini.i.active { background: var(--warning) !important; border-color: transparent !important; color: #fff !important; box-shadow: 0 4px 10px -3px rgba(245, 158, 11, 0.45); }
+  #students .table-custom .attendance-btn.mini.a.active { background: var(--danger) !important; border-color: transparent !important; color: #fff !important; box-shadow: 0 4px 10px -3px rgba(239, 68, 68, 0.45); }
+
+  /* Premium Nilai chip */
+  #students .table-custom td[data-label="Rata Nilai"] button {
+    min-height: 40px;
+    padding: 7px 16px !important;
+    font-size: 0.95rem !important;
+    background: var(--primary-light) !important;
+    color: var(--primary) !important;
+    border: none !important;
+    box-shadow: 0 2px 6px -2px rgba(15, 118, 110, 0.25);
+  }
+  #students .table-custom td[data-label="Rata Nilai"] button.below-kkm {
+    background: var(--danger-light) !important;
+    color: var(--danger) !important;
+    box-shadow: 0 2px 6px -2px rgba(239, 68, 68, 0.25);
+  }
+  #students .table-custom td[data-label="Rata Nilai"] button.empty {
+    background: transparent !important;
+    border: 1.5px dashed var(--border-color) !important;
+    color: var(--text-muted) !important;
+    box-shadow: none;
+  }
+
+  /* Premium Tabungan chip */
+  #students .table-custom td[data-label="Tabungan"] button {
+    min-height: 40px;
+    padding: 7px 14px !important;
+    font-size: 0.82rem !important;
+    font-weight: 600;
+    background: #f0fdf4 !important;
+    color: var(--success-hover) !important;
+    border: none !important;
+  }
+
+  /* Refined checkbox */
+  #students .table-custom td[data-label="Pilih"] input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary);
+  }
+}
+
+/* ============================================================
+   MOBILE: generic data tables → cards + table polish
+   ============================================================ */
+@media (max-width: 768px) {
+  /* Card-transform tables marked .cards-sm */
+  .table-wrapper:has(.cards-sm) {
+    border: none;
+    background: none;
+    box-shadow: none;
+    overflow: visible;
+  }
+  table.cards-sm thead { display: none; }
+  table.cards-sm,
+  table.cards-sm tbody { display: block; width: 100%; }
+  table.cards-sm tr {
+    display: block;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 6px 16px -10px rgba(15,23,42,0.14);
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  table.cards-sm td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 5px 0 !important;
+    border: none !important;
+    font-size: 0.88rem;
+    text-align: right;
+  }
+  table.cards-sm td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    text-align: left;
+  }
+  /* Hidden row index */
+  table.cards-sm td[data-label="No"] { display: none; }
+  /* Name = card header (full width, emphasized) */
+  table.cards-sm td[data-label="Nama"] {
+    justify-content: flex-start;
+    font-size: 1rem;
+    font-weight: 700;
+    padding-bottom: 8px !important;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border-color) !important;
+  }
+  table.cards-sm td[data-label="Nama"]::before { display: none; }
+  table.cards-sm td[data-label="Nama"] strong { font-weight: 700; }
+  /* Long text + actions span full width */
+  table.cards-sm td[data-label="Keterangan"] { text-align: left; flex-direction: column; align-items: flex-start; gap: 2px; }
+  table.cards-sm td[data-label="Aksi"] { justify-content: flex-end; padding-top: 8px !important; }
+  table.cards-sm td[data-label="Aksi"]::before { display: none; }
+  table.cards-sm td[data-label="Aksi"] .btn { min-height: 40px; }
+
+  /* Generic polish for tables NOT converted to cards (e.g. dynamic recap matrix) */
+  .table-wrapper { -webkit-overflow-scrolling: touch; }
+  .table-wrapper:not(:has(.cards-sm)) .table-custom th,
+  .table-wrapper:not(:has(.cards-sm)) .table-custom td {
+    padding: 10px 12px;
+    font-size: 0.82rem;
+  }
+}
