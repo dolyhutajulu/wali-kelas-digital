@@ -1,7 +1,7 @@
 # Design: Fully-Custom PH Components + Editable Weights + Mobile-Friendly Grade Entry
 
 **Date:** 2026-06-25
-**Status:** Approved (pending written-spec review)
+**Status:** Approved — REVISED 2026-06-25 (see "Revision 2" at end)
 **Area:** Nilai & Akademik (grades) — `js/store.js`, `js/app.js`, `index.html`, `css/style.css`
 
 ## Problem
@@ -188,3 +188,66 @@ Manual verification on a seeded demo class (no automated test harness exists in 
 7. **Mobile:** at 360px width, grades page opens on "Input Per Siswa"; entering a student shows a
    vertical no-horizontal-scroll form with ≥44px inputs; `+ Tambah PH` works.
 8. **Rekap/Buku Induk:** per-subject average and overall average reflect the new computation.
+
+---
+
+## Revision 2 (2026-06-25) — Remedial, two semesters, materi descriptions
+
+After the first implementation landed, the teacher requested three changes that
+partially reverse earlier decisions. These supersede the relevant sections above.
+
+### R2.1 Remedial is back (paired per slot)
+- Every PH slot has a paired **Re** (remedial) input; the SAS has a paired **ReSAS**.
+- Effective value per slot = **max(PH, Re)**; effective SAS = **max(SAS, ReSAS)**.
+- `RATA PH` = mean of effective PH values over slots that have any value.
+- **Nilai Rapor = round(RATA PH × phW + SAS_eff × sasW)** with weights renormalized
+  when a category is empty (weights still editable, default 60/40).
+
+### R2.2 Both semesters shown side by side (grid)
+- "Input Sekelas (Grid)" shows **Semester 1 and Semester 2 together** in one wide table
+  (desktop-oriented; phones use "Input Per Siswa"). This reverses R1's single-semester grid.
+- PH count stays **independent per (subject × semester)**. Adding/removing a PH targets a
+  specific semester via a per-semester **+ PH** control in that semester's header group.
+
+### R2.3 Materi (topic) description per PH slot
+- Each PH slot carries a **materi** text shown in the header spanning its PH + Re columns,
+  editable inline (pencil affordance). Stored per (subject × semester × slot).
+
+### R2.4 Data model (supersedes "Component storage")
+Per subject, per semester, an ordered component list seeded to match legacy ids so existing
+grades reappear and now count again:
+
+```js
+subject.assessmentsBySemester['1'] = [
+  { id: 's1_ph1', name: 'PH1', category: 'ph', materi: '' },
+  { id: 's1_re1', name: 'Re1', category: 're', slot: 1 },
+  { id: 's1_ph2', name: 'PH2', category: 'ph', materi: '' },
+  { id: 's1_re2', name: 'Re2', category: 're', slot: 2 },
+  { id: 's1_ph3', name: 'PH3', category: 'ph', materi: '' },
+  { id: 's1_re3', name: 'Re3', category: 're', slot: 3 },
+  { id: 's1_sas',   name: 'SAS',   category: 'sas'   },
+  { id: 's1_resas', name: 'ReSAS', category: 'resas' }
+];
+```
+- PH slot n is paired with Re id `s{sem}_re{n}`. `addPhComponent(subjectId, semester)` appends
+  `ph{n}` + `re{n}` before SAS. `deletePhComponent(subjectId, phId, semester)` removes both the
+  PH and its Re plus their stored grades. Keep ≥1 PH and the SAS/ReSAS.
+- `setMateri(subjectId, semester, phId, text)` updates a slot's materi.
+
+### R2.5 Store API (supersedes earlier compute methods)
+- `getSubjectAssessments(subjectId, semester = current)` → that semester's component list.
+- `getSubjectSemesterAverage(studentId, subjectId, semester)` → Nilai Rapor for that semester
+  using max(PH,Re) per slot and max(SAS,ReSAS), weighted.
+- `getSubjectAverage(studentId, subjectId)` = `getSubjectSemesterAverage(..., currentSemester)`
+  (keeps Buku Induk / recap on the active semester).
+- `getSubjectPhAverage(studentId, subjectId, semester = current)` → mean of max(PH,Re).
+
+### R2.6 Per-student form (mobile)
+- "Input Per Siswa" shows **both semesters** stacked vertically (chosen over single-semester):
+  each semester section lists, per PH slot, the materi label + PH input + Re input, then SAS + ReSAS,
+  and a live Nilai Rapor preview per semester. `+ Tambah PH` per semester section.
+
+### R2.7 Verification additions
+- Unit tests: `max(PH,Re)` per slot; `max(SAS,ReSAS)`; RATA PH over effective values; weighted
+  Nilai Rapor; add/delete slot removes both PH+Re and their grades; materi persists; per-semester
+  independence; legacy `s{sem}_re*`/`resas` values now contribute again.

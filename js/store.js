@@ -2,38 +2,16 @@
 
 const STORE_KEY = 'walikelas_digital_state';
 
-// Grade categories. Tugas & Ulangan Harian are MULTI-entry (averaged within
-// the category); UTS & UAS are SINGLE-entry (one value per subject).
+// Grade categories. PH is MULTI-entry (averaged within the category);
+// SAS is SINGLE-entry (one value per subject).
 const GRADE_CATEGORIES = [
   { id: 'ph', name: 'Penilaian Harian', multi: true },
   { id: 'sas', name: 'Sumatif Akhir Semester (SAS)', multi: false }
 ];
 const GRADE_CATEGORY_IDS = GRADE_CATEGORIES.map(c => c.id);
-const SINGLE_CATEGORIES = GRADE_CATEGORIES.filter(c => !c.multi).map(c => c.id);
 // Default per-category weight (percentages, sum 100). Editable per subject.
 const DEFAULT_CATEGORY_WEIGHTS = { ph: 60, sas: 40 };
-
-// Default assessment components shared by every subject.
-// `category` maps the component to a grade category; `core: true` = undeletable.
-const DEFAULT_ASSESSMENTS = [
-  { id: 'tugas1', name: 'Tugas 1', category: 'tugas', core: true },
-  { id: 'ulangan1', name: 'Ulangan Harian 1', category: 'uh', core: true },
-  { id: 'pts', name: 'UTS / STS', category: 'uts', core: true },
-  { id: 'pas', name: 'UAS / SAS', category: 'uas', core: true }
-];
-const DEFAULT_ASSESSMENT_IDS = DEFAULT_ASSESSMENTS.map(a => a.id);
 const DEFAULT_KKM = 70;
-
-// Map a stored component to a current category id (handles legacy data).
-function normalizeAssessmentCategory(a) {
-  const byId = { tugas1: 'tugas', ulangan1: 'uh', pts: 'uts', pas: 'uas' };
-  if (byId[a.id]) return byId[a.id];
-  const c = (a.category || '').toLowerCase();
-  if (GRADE_CATEGORY_IDS.includes(c)) return c;
-  if (c === 'formatif') return 'tugas';
-  if (c === 'sumatif') return 'uas';
-  return 'tugas';
-}
 
 const INITIAL_STATE = {
   settings: {
@@ -771,8 +749,9 @@ class Store {
     return String(this.state.settings.semester || 1);
   }
 
-  // Returns the stored component array for (subject, semester), seeding a default
-  // PH1,PH2,PH3,SAS list on first use. Mutates + persists only when it seeds.
+  // Returns the stored component array for (subject, semester), seeding the
+  // default PH1/Re1..PH3/Re3 + SAS/ReSAS list on first use. Persists on seed.
+  // Ids match the legacy scheme so previously entered grades line up.
   _ensureSemesterAssessments(subjectId, semester) {
     const subject = (this.state.settings.subjects || []).find(s => s.id === subjectId);
     if (!subject) return [];
@@ -780,27 +759,62 @@ class Store {
     const sem = String(semester);
     const existing = subject.assessmentsBySemester[sem];
     if (!Array.isArray(existing) || existing.length === 0) {
-      subject.assessmentsBySemester[sem] = [
-        { id: `s${sem}_ph1`, name: 'PH1', category: 'ph', core: true },
-        { id: `s${sem}_ph2`, name: 'PH2', category: 'ph' },
-        { id: `s${sem}_ph3`, name: 'PH3', category: 'ph' },
-        { id: `s${sem}_sas`, name: 'SAS', category: 'sas', core: true }
-      ];
+      const list = [];
+      for (let n = 1; n <= 3; n += 1) {
+        list.push({ id: `s${sem}_ph${n}`, name: `PH${n}`, category: 'ph', materi: '', core: n === 1 });
+        list.push({ id: `s${sem}_re${n}`, name: `Re${n}`, category: 're' });
+      }
+      list.push({ id: `s${sem}_sas`, name: 'SAS', category: 'sas', core: true });
+      list.push({ id: `s${sem}_resas`, name: 'ReSAS', category: 'resas' });
+      subject.assessmentsBySemester[sem] = list;
       this.saveState();
     }
     return subject.assessmentsBySemester[sem];
   }
 
-  // Components for the CURRENT semester. PH labels are normalized to position
-  // (PH1, PH2, ...) so deleting a middle PH never leaves a numbering gap.
-  getSubjectAssessments(subjectId) {
-    const sem = this._currentSemester();
+  // Components for a semester (defaults to current). PH/Re labels are normalized
+  // to slot position so deleting a middle slot never leaves a numbering gap.
+  getSubjectAssessments(subjectId, semester) {
+    const sem = semester !== undefined ? String(semester) : this._currentSemester();
     const list = this._ensureSemesterAssessments(subjectId, sem);
     let phPos = 0;
     return list.map(a => {
       if (a.category === 'ph') { phPos += 1; return { ...a, name: `PH${phPos}` }; }
-      return { ...a, name: 'SAS' };
+      if (a.category === 're') return { ...a, name: `Re${phPos}` };
+      if (a.category === 'sas') return { ...a, name: 'SAS' };
+      if (a.category === 'resas') return { ...a, name: 'ReSAS' };
+      return { ...a };
     });
+  }
+
+  // PH slots paired with their Re component, for a semester. [{ ph, re, materi }].
+  getSubjectPhSlots(subjectId, semester) {
+    const list = this.getSubjectAssessments(subjectId, semester);
+    return list.filter(a => a.category === 'ph').map(ph => ({
+      ph,
+      re: list.find(a => a.category === 're' && a.id === ph.id.replace('_ph', '_re')) || null,
+      materi: ph.materi || ''
+    }));
+  }
+
+  // The SAS + ReSAS pair for a semester.
+  getSubjectSasPair(subjectId, semester) {
+    const list = this.getSubjectAssessments(subjectId, semester);
+    return {
+      sas: list.find(a => a.category === 'sas') || null,
+      resas: list.find(a => a.category === 'resas') || null
+    };
+  }
+
+  // Set the materi (topic) description for a PH slot.
+  setMateri(subjectId, semester, phId, text) {
+    const sem = semester !== undefined ? String(semester) : this._currentSemester();
+    const list = this._ensureSemesterAssessments(subjectId, sem);
+    const ph = list.find(a => a.id === phId && a.category === 'ph');
+    if (!ph) return { success: false, error: 'Komponen PH tidak ditemukan.' };
+    ph.materi = (text || '').trim();
+    this.saveState();
+    return { success: true };
   }
 
   // Per-subject category weights (percentages). Falls back to defaults.
@@ -828,132 +842,44 @@ class Store {
     return { success: true, weights: clean };
   }
 
-  getGradeCategories() {
-    return JSON.parse(JSON.stringify(GRADE_CATEGORIES));
-  }
-
-  // Append a new PH component to the current semester (before SAS). Class-wide.
-  addPhComponent(subjectId) {
-    const sem = this._currentSemester();
+  // Append a new PH slot (PH + paired Re) to a semester (default current),
+  // before the SAS. Class-wide. Returns the new PH component.
+  addPhComponent(subjectId, semester) {
+    const sem = semester !== undefined ? String(semester) : this._currentSemester();
     const list = this._ensureSemesterAssessments(subjectId, sem);
     let n = 1;
-    while (list.some(a => a.id === `s${sem}_ph${n}`)) n += 1;
-    const component = { id: `s${sem}_ph${n}`, name: `PH${n}`, category: 'ph' };
+    while (list.some(a => a.id === `s${sem}_ph${n}` || a.id === `s${sem}_re${n}`)) n += 1;
+    const ph = { id: `s${sem}_ph${n}`, name: `PH${n}`, category: 'ph', materi: '' };
+    const re = { id: `s${sem}_re${n}`, name: `Re${n}`, category: 're' };
     const sasIdx = list.findIndex(a => a.category === 'sas');
-    if (sasIdx === -1) list.push(component);
-    else list.splice(sasIdx, 0, component);
+    if (sasIdx === -1) { list.push(ph, re); }
+    else { list.splice(sasIdx, 0, ph, re); }
     this.saveState();
-    return { success: true, component };
+    return { success: true, component: ph };
   }
 
-  // Delete a PH component from the current semester and drop its stored grades
-  // for every student. Refuses when only one PH remains.
-  deletePhComponent(subjectId, componentId) {
-    const sem = this._currentSemester();
+  // Delete a PH slot (the PH and its paired Re) from a semester and drop the
+  // stored grades for both, for every student. Refuses when only one PH remains.
+  deletePhComponent(subjectId, componentId, semester) {
+    const sem = semester !== undefined ? String(semester) : this._currentSemester();
     const list = this._ensureSemesterAssessments(subjectId, sem);
     const phCount = list.filter(a => a.category === 'ph').length;
     if (phCount <= 1) return { success: false, error: 'Minimal harus ada 1 Penilaian Harian.' };
-    const idx = list.findIndex(a => a.id === componentId && a.category === 'ph');
-    if (idx === -1) return { success: false, error: 'Komponen PH tidak ditemukan.' };
-    list.splice(idx, 1);
+    const phIdx = list.findIndex(a => a.id === componentId && a.category === 'ph');
+    if (phIdx === -1) return { success: false, error: 'Komponen PH tidak ditemukan.' };
+    const reId = componentId.replace('_ph', '_re');
+    const idsToRemove = [componentId, reId];
+    for (let i = list.length - 1; i >= 0; i -= 1) {
+      if (idsToRemove.includes(list[i].id)) list.splice(i, 1);
+    }
     Object.keys(this.state.grades || {}).forEach(sid => {
       const subjGrades = this.state.grades[sid][subjectId];
-      if (subjGrades && Object.prototype.hasOwnProperty.call(subjGrades, componentId)) {
-        delete subjGrades[componentId];
-      }
+      if (subjGrades) idsToRemove.forEach(id => {
+        if (Object.prototype.hasOwnProperty.call(subjGrades, id)) delete subjGrades[id];
+      });
     });
     this.saveState();
     return { success: true };
-  }
-
-  // Ensure the subject has a persisted, editable assessments array (normalized).
-  _ensureAssessments(subject) {
-    if (!Array.isArray(subject.assessments) || subject.assessments.length === 0) {
-      subject.assessments = JSON.parse(JSON.stringify(DEFAULT_ASSESSMENTS));
-    } else {
-      // Persist normalized categories so legacy data is migrated on first touch.
-      subject.assessments.forEach(a => {
-        a.category = normalizeAssessmentCategory(a);
-        if (a.weight !== undefined) delete a.weight; // weight is per-category now
-      });
-    }
-    return subject.assessments;
-  }
-
-  // Suggest the next sequential name for a multi-entry category (e.g. "Tugas 3").
-  suggestAssessmentName(subjectId, category) {
-    const cat = GRADE_CATEGORIES.find(c => c.id === category) || GRADE_CATEGORIES[0];
-    const existing = this.getSubjectAssessments(subjectId).filter(a => a.category === category).length;
-    return `${cat.name} ${existing + 1}`;
-  }
-
-  addSubjectAssessment(subjectId, name, category) {
-    const subject = this.state.settings.subjects.find(s => s.id === subjectId);
-    if (!subject) return { success: false, error: 'Mata pelajaran tidak ditemukan' };
-
-    const cat = GRADE_CATEGORY_IDS.includes(category) ? category : 'tugas';
-
-    const assessments = this._ensureAssessments(subject);
-
-    // Single-entry categories (UTS/UAS) may only have one component.
-    if (SINGLE_CATEGORIES.includes(cat) && assessments.some(a => normalizeAssessmentCategory(a) === cat)) {
-      const cName = GRADE_CATEGORIES.find(c => c.id === cat).name;
-      return { success: false, error: `${cName} hanya boleh satu per mata pelajaran` };
-    }
-
-    const baseId = (name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
-    if (!baseId) return { success: false, error: 'Nama komponen tidak boleh kosong' };
-
-    let id = baseId;
-    let n = 2;
-    while (assessments.some(a => a.id === id)) {
-      id = `${baseId}_${n++}`;
-    }
-
-    const newAssessment = { id, name: name.trim(), category: cat, core: false };
-    assessments.push(newAssessment);
-    this.saveState();
-    return { success: true, assessment: newAssessment };
-  }
-
-  updateSubjectAssessment(subjectId, assessmentId, updates) {
-    const subject = this.state.settings.subjects.find(s => s.id === subjectId);
-    if (!subject) return { success: false, error: 'Mata pelajaran tidak ditemukan' };
-
-    const assessments = this._ensureAssessments(subject);
-    const a = assessments.find(x => x.id === assessmentId);
-    if (!a) return { success: false, error: 'Komponen tidak ditemukan' };
-
-    if (updates.name && updates.name.trim()) a.name = updates.name.trim();
-    if (updates.category && GRADE_CATEGORY_IDS.includes(updates.category)) a.category = updates.category;
-    this.saveState();
-    return { success: true, assessment: a };
-  }
-
-  deleteSubjectAssessment(subjectId, assessmentId) {
-    const subject = this.state.settings.subjects.find(s => s.id === subjectId);
-    if (!subject) return { success: false, error: 'Mata pelajaran tidak ditemukan' };
-
-    if (DEFAULT_ASSESSMENT_IDS.includes(assessmentId)) {
-      return { success: false, error: 'Komponen nilai inti tidak dapat dihapus' };
-    }
-
-    const assessments = this._ensureAssessments(subject);
-    const index = assessments.findIndex(a => a.id === assessmentId);
-    if (index !== -1) {
-      const name = assessments[index].name;
-      assessments.splice(index, 1);
-
-      this.state.students.forEach(st => {
-        if (this.state.grades[st.id] && this.state.grades[st.id][subjectId]) {
-          delete this.state.grades[st.id][subjectId][assessmentId];
-        }
-      });
-
-      this.saveState();
-      return { success: true, name: name };
-    }
-    return { success: false, error: 'Komponen tidak ditemukan' };
   }
 
   // STUDENT MANAGEMENT
@@ -1115,70 +1041,39 @@ class Store {
     this.saveState();
   }
 
-  // Batch-save grades for one subject across many students (grid input).
-  // gradeMap: { studentId: { assessmentId: value, ... }, ... }
-  saveGradesBatch(subject, gradeMap) {
-    Object.keys(gradeMap).forEach(studentId => {
-      const comps = gradeMap[studentId];
-      Object.keys(comps).forEach(examType => {
-        this._writeGrade(studentId, subject, examType, comps[examType]);
-      });
-    });
-    this.saveState();
-  }
-
   getGrades(studentId) {
     return this.state.grades[studentId] || {};
   }
 
-  // Per-category averages for one subject.
-  // Returns { tugas: {avg, count}, uh: {...}, uts: {...}, uas: {...} }
-  // where avg is null when that category has no entered value.
-  getSubjectCategoryAverages(studentId, subjectId) {
-    const scores = (this.state.grades[studentId] || {})[subjectId] || {};
-    const assessments = this.getSubjectAssessments(subjectId);
-    const buckets = {};
-    GRADE_CATEGORY_IDS.forEach(cat => { buckets[cat] = []; });
-    assessments.forEach(a => {
-      const v = scores[a.id];
-      if (v !== undefined && v !== null && v !== '' && !isNaN(parseFloat(v))) {
-        if (!buckets[a.category]) buckets[a.category] = [];
-        buckets[a.category].push(parseFloat(v));
-      }
-    });
-    const out = {};
-    GRADE_CATEGORY_IDS.forEach(cat => {
-      const arr = buckets[cat] || [];
-      out[cat] = {
-        avg: arr.length ? Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 100) / 100 : null,
-        count: arr.length
-      };
-    });
-    return out;
+  // Effective value of a slot = max(primary, remedial). Null when neither set.
+  _effectiveScore(scores, primaryId, remedialId) {
+    const p = primaryId ? scores[primaryId] : undefined;
+    const r = remedialId ? scores[remedialId] : undefined;
+    const hasP = p !== undefined && p !== null && p !== '' && !isNaN(parseFloat(p));
+    const hasR = r !== undefined && r !== null && r !== '' && !isNaN(parseFloat(r));
+    if (!hasP && !hasR) return null;
+    return Math.max(hasP ? parseFloat(p) : 0, hasR ? parseFloat(r) : 0);
   }
 
-  // Average of the CURRENT semester's entered PH values (2dp), or null.
-  getSubjectPhAverage(studentId, subjectId) {
+  // Average of a semester's effective PH values — max(PH, Re) per slot (2dp).
+  getSubjectPhAverage(studentId, subjectId, semester) {
     const scores = (this.state.grades[studentId] || {})[subjectId] || {};
-    const vals = this.getSubjectAssessments(subjectId)
-      .filter(a => a.category === 'ph')
-      .map(a => scores[a.id])
-      .filter(v => v !== undefined && v !== null && v !== '' && !isNaN(parseFloat(v)))
-      .map(v => parseFloat(v));
+    const vals = this.getSubjectPhSlots(subjectId, semester)
+      .map(s => this._effectiveScore(scores, s.ph.id, s.re ? s.re.id : null))
+      .filter(v => v !== null);
     if (vals.length === 0) return null;
     return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100;
   }
 
-  // Final subject grade (Nilai Rapor) for the CURRENT semester.
-  // PH average and SAS are combined by per-subject weights, renormalized so a
-  // missing category does not drag the result down. Null when nothing entered.
-  getSubjectAverage(studentId, subjectId) {
+  // Nilai Rapor for a specific semester. RATA PH (max PH,Re) and SAS (max SAS,ReSAS)
+  // combined by per-subject weights, renormalized when a category is empty.
+  getSubjectSemesterAverage(studentId, subjectId, semester) {
     const scores = (this.state.grades[studentId] || {})[subjectId] || {};
-    const rataPH = this.getSubjectPhAverage(studentId, subjectId);
-    const sasComp = this.getSubjectAssessments(subjectId).find(a => a.category === 'sas');
-    const sasRaw = sasComp ? scores[sasComp.id] : undefined;
-    const sasVal = (sasRaw === undefined || sasRaw === null || sasRaw === '' || isNaN(parseFloat(sasRaw)))
-      ? null : parseFloat(sasRaw);
+    const rataPH = this.getSubjectPhAverage(studentId, subjectId, semester);
+    const pair = this.getSubjectSasPair(subjectId, semester);
+    const sasVal = pair.sas
+      ? this._effectiveScore(scores, pair.sas.id, pair.resas ? pair.resas.id : null)
+      : null;
 
     const weights = this.getCategoryWeights(subjectId);
     let sum = 0;
@@ -1187,6 +1082,11 @@ class Store {
     if (sasVal !== null) { sum += sasVal * (weights.sas || 0); wTotal += (weights.sas || 0); }
     if (wTotal === 0) return null;
     return Math.round(sum / wTotal);
+  }
+
+  // Final subject grade for the CURRENT semester (used by Buku Induk / recap).
+  getSubjectAverage(studentId, subjectId) {
+    return this.getSubjectSemesterAverage(studentId, subjectId, this._currentSemester());
   }
 
   // Overall average across CURRENT subjects only (ignores orphaned data).

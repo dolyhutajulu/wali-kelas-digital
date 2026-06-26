@@ -45,33 +45,79 @@ test('each semester has an independent component list', () => {
   assert.ok(s2.every(c => c.id.startsWith('s2_')));
 });
 
-test('addPhComponent appends PH4 before SAS and is independent per semester', () => {
+test('addPhComponent appends PH4 (+ paired Re4) before SAS, independent per semester', () => {
   const store = freshStore();
   const subjectId = store.getSubjects()[0].id;
   store.updateClassSettings(undefined, undefined, undefined, undefined, undefined, 1);
   const res = store.addPhComponent(subjectId);
   assert.strictEqual(res.success, true);
   assert.strictEqual(res.component.id, 's1_ph4');
-  const names = store.getSubjectAssessments(subjectId).map(c => c.name);
-  assert.deepStrictEqual(names, ['PH1', 'PH2', 'PH3', 'PH4', 'SAS']);
+  const comps = store.getSubjectAssessments(subjectId);
+  const phNames = comps.filter(c => c.category === 'ph').map(c => c.name);
+  assert.deepStrictEqual(phNames, ['PH1', 'PH2', 'PH3', 'PH4']);
+  assert.ok(comps.some(c => c.id === 's1_re4' && c.category === 're'), 'paired Re4 added');
+  // SAS stays last (after the new slot)
+  assert.strictEqual(comps[comps.length - 2].category, 'sas');
+  assert.strictEqual(comps[comps.length - 1].category, 'resas');
   store.updateClassSettings(undefined, undefined, undefined, undefined, undefined, 2);
   const s2 = store.getSubjectAssessments(subjectId).filter(c => c.category === 'ph');
   assert.strictEqual(s2.length, 3);
 });
 
-test('deletePhComponent removes the column and its grades; keeps >=1 PH', () => {
+test('deletePhComponent removes the PH + its paired Re and their grades; keeps >=1 PH', () => {
   const store = freshStoreWithStudent();
   const subjectId = store.getSubjects()[0].id;
   const studentId = store.state.students[0].id;
   store.updateClassSettings(undefined, undefined, undefined, undefined, undefined, 1);
   store.saveGrade(studentId, subjectId, 's1_ph2', 88);
+  store.saveGrade(studentId, subjectId, 's1_re2', 95);
   const del = store.deletePhComponent(subjectId, 's1_ph2');
   assert.strictEqual(del.success, true);
   const ids = store.getSubjectAssessments(subjectId).map(c => c.id);
   assert.ok(!ids.includes('s1_ph2'), 'ph2 removed');
+  assert.ok(!ids.includes('s1_re2'), 'paired re2 removed');
   assert.strictEqual(store.getGrades(studentId)[subjectId]['s1_ph2'], undefined);
+  assert.strictEqual(store.getGrades(studentId)[subjectId]['s1_re2'], undefined);
   const phNames = store.getSubjectAssessments(subjectId).filter(c => c.category === 'ph').map(c => c.name);
   assert.deepStrictEqual(phNames, ['PH1', 'PH2']);
+});
+
+test('remedial: effective PH = max(PH, Re); SAS = max(SAS, ReSAS)', () => {
+  const store = freshStoreWithStudent();
+  const subjectId = store.getSubjects()[0].id;
+  const studentId = store.state.students[0].id;
+  store.updateClassSettings(undefined, undefined, undefined, undefined, undefined, 1);
+  store.saveGrade(studentId, subjectId, 's1_ph1', 50);
+  store.saveGrade(studentId, subjectId, 's1_re1', 80); // eff = 80
+  store.saveGrade(studentId, subjectId, 's1_ph2', 90); // eff = 90 (no re)
+  store.saveGrade(studentId, subjectId, 's1_sas', 70);
+  store.saveGrade(studentId, subjectId, 's1_resas', 60); // eff = 70
+  assert.strictEqual(store.getSubjectPhAverage(studentId, subjectId), 85); // (80+90)/2
+  // 0.6*85 + 0.4*70 = 51 + 28 = 79
+  assert.strictEqual(store.getSubjectAverage(studentId, subjectId), 79);
+});
+
+test('setMateri persists per slot and is independent per semester', () => {
+  const store = freshStore();
+  const subjectId = store.getSubjects()[0].id;
+  store.updateClassSettings(undefined, undefined, undefined, undefined, undefined, 1);
+  const ok = store.setMateri(subjectId, 1, 's1_ph2', 'Pecahan');
+  assert.strictEqual(ok.success, true);
+  const slot = store.getSubjectPhSlots(subjectId, 1).find(s => s.ph.id === 's1_ph2');
+  assert.strictEqual(slot.materi, 'Pecahan');
+  // semester 2 slot 2 has no materi
+  const slot2 = store.getSubjectPhSlots(subjectId, 2).find(s => s.ph.id === 's2_ph2');
+  assert.strictEqual(slot2.materi, '');
+});
+
+test('getSubjectSemesterAverage computes each semester independently', () => {
+  const store = freshStoreWithStudent();
+  const subjectId = store.getSubjects()[0].id;
+  const studentId = store.state.students[0].id;
+  store.saveGrade(studentId, subjectId, 's1_ph1', 80);
+  store.saveGrade(studentId, subjectId, 's2_ph1', 60);
+  assert.strictEqual(store.getSubjectSemesterAverage(studentId, subjectId, 1), 80);
+  assert.strictEqual(store.getSubjectSemesterAverage(studentId, subjectId, 2), 60);
 });
 
 test('deletePhComponent refuses to remove the last PH', () => {

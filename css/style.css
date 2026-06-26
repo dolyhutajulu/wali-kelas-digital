@@ -2296,3 +2296,38 @@ button, a, input, select, textarea, label, .quick-action-btn, .bottom-nav-item {
 .weight-popover input { width: 80px; min-height: 40px; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); text-align: center; }
 .weight-total { font-size: 0.75rem; color: var(--text-muted); }
 .weight-popover-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* --- INPUT PER SISWA (mobile-friendly grade form) --- */
+.ps-grade-section-title { font-size: 0.8rem; font-weight: 700; color: var(--primary); text-transform: uppercase; margin: 14px 0 6px; }
+.ps-grade-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.ps-grade-field label { font-size: 0.9rem; font-weight: 600; color: var(--text-main); }
+.ps-grade-input { width: 96px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); text-align: center; font-size: 1rem; }
+.ps-grade-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-light); }
+.ps-add-ph { margin: 4px 0 8px; }
+.ps-rapor-preview { margin-top: 14px; padding: 12px; background: var(--primary-light); color: var(--primary); border-radius: var(--radius-md); font-weight: 600; text-align: center; }
+@media (max-width: 768px) {
+  .ps-grade-input { width: 110px; }
+}
+
+/* Per-student & quick-grade containers render as a single vertical column. */
+#main-grade-inputs-container,
+#quick-grade-inputs-container { display: block !important; }
+
+/* --- GRADE GRID: materi header + per-slot controls --- */
+.materi-head { position: relative; vertical-align: middle; }
+.materi-head .materi-text { display: inline-block; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+.materi-edit-btn, .ph-del-btn {
+  background: none; border: none; cursor: pointer; padding: 2px; line-height: 1; font-size: 0.62rem;
+}
+.materi-edit-btn { color: var(--text-muted); }
+.materi-edit-btn:hover { color: var(--primary); }
+.ph-del-btn { color: var(--danger); }
+.ph-add-btn:hover { filter: brightness(1.1); }
+
+/* --- INPUT PER SISWA: semester blocks + PH slots (remedial + materi) --- */
+.ps-sem-block { border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px; margin-bottom: 16px; background: var(--bg-card); }
+.ps-sem-title { font-size: 0.85rem; font-weight: 800; color: var(--primary); letter-spacing: 0.04em; margin-bottom: 10px; }
+.ps-slot { border-left: 3px solid var(--primary-light); padding: 8px 0 8px 12px; margin-bottom: 12px; }
+.ps-materi-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--primary-light); color: var(--primary); border: 1px dashed var(--primary); border-radius: var(--radius-full); padding: 4px 12px; font-size: 0.78rem; font-weight: 600; cursor: pointer; margin-bottom: 8px; max-width: 100%; }
+.ps-materi-btn:hover { filter: brightness(0.97); }
+.ps-add-ph { margin: 4px 0 12px; }

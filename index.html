@@ -326,9 +326,6 @@
                 <span id="grades-autosave-indicator" class="text-muted" style="font-size:0.8rem; display:inline-flex; align-items:center; gap:4px; opacity:0.85; transition: opacity 0.3s ease;">
                   <i class="fas fa-check-circle" style="color:var(--success);"></i> Semua perubahan disimpan otomatis
                 </span>
-                <button id="btn-add-ph" class="btn btn-secondary" type="button" style="font-size:0.8rem; padding:5px 10px;">
-                  <i class="fas fa-plus"></i> Tambah PH
-                </button>
                 <div style="position: relative; display: inline-block;">
                   <button id="btn-edit-weights" class="btn btn-secondary" type="button" style="font-size:0.8rem; padding:5px 10px;">
                     <i class="fas fa-sliders-h"></i> Atur Bobot
@@ -356,7 +353,7 @@
             </div>
 
             <div class="table-wrapper" style="border: 1px solid var(--border-color); border-top: none; border-bottom-left-radius: var(--radius-md); border-bottom-right-radius: var(--radius-md); background: var(--bg-card); overflow-x: auto; max-height: 65vh;">
-              <table class="table-custom" id="grade-grid-table" style="margin-bottom:0; font-size:0.82rem; border-collapse: collapse; min-width: 680px;">
+              <table class="table-custom" id="grade-grid-table" style="margin-bottom:0; font-size:0.82rem; border-collapse: collapse; min-width: 1200px;">
                 <thead>
                   <!-- We will construct two-row headers: Semester 1 & Semester 2 -->
                 </thead>
@@ -1249,11 +1246,6 @@
             <!-- Dynamically populated fields -->
           </div>
 
-          <div style="text-align: center; margin: 15px 0 5px 0;">
-            <button type="button" id="btn-add-quick-grade-component" class="btn btn-outline" style="font-size: 0.85rem; padding: 6px 12px; width: 100%; border: 1px dashed var(--primary); color: var(--primary); background: none; border-radius: var(--radius-md); cursor: pointer;">
-              <i class="fas fa-plus-circle"></i> Tambah Komponen Nilai Baru (Tugas/Ulangan)
-            </button>
-          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary modal-close">Batal</button>
@@ -1362,25 +1354,15 @@
             </div>
           </div>
 
-          <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:8px;">BOBOT PENILAIAN (%)</label>
+          <label style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:8px;">BOBOT NILAI RAPOR (%)</label>
           <div class="form-row">
             <div class="input-group">
-              <label for="edit-weight-tugas" style="font-size:0.8rem;">Tugas</label>
-              <input type="number" id="edit-weight-tugas" class="edit-weight-input" min="0" max="100" step="1" style="width:100%; padding:8px 12px; border-radius:var(--radius-md); border:1.5px solid var(--border-color); background:var(--bg-main); color:var(--text-main);">
+              <label for="edit-weight-ph" style="font-size:0.8rem;">Penilaian Harian (PH)</label>
+              <input type="number" id="edit-weight-ph" class="edit-weight-input" min="0" max="100" step="1" style="width:100%; padding:8px 12px; border-radius:var(--radius-md); border:1.5px solid var(--border-color); background:var(--bg-main); color:var(--text-main);">
             </div>
             <div class="input-group">
-              <label for="edit-weight-uh" style="font-size:0.8rem;">Ulangan Harian</label>
-              <input type="number" id="edit-weight-uh" class="edit-weight-input" min="0" max="100" step="1" style="width:100%; padding:8px 12px; border-radius:var(--radius-md); border:1.5px solid var(--border-color); background:var(--bg-main); color:var(--text-main);">
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="input-group">
-              <label for="edit-weight-uts" style="font-size:0.8rem;">UTS / STS</label>
-              <input type="number" id="edit-weight-uts" class="edit-weight-input" min="0" max="100" step="1" style="width:100%; padding:8px 12px; border-radius:var(--radius-md); border:1.5px solid var(--border-color); background:var(--bg-main); color:var(--text-main);">
-            </div>
-            <div class="input-group">
-              <label for="edit-weight-uas" style="font-size:0.8rem;">UAS / SAS</label>
-              <input type="number" id="edit-weight-uas" class="edit-weight-input" min="0" max="100" step="1" style="width:100%; padding:8px 12px; border-radius:var(--radius-md); border:1.5px solid var(--border-color); background:var(--bg-main); color:var(--text-main);">
+              <label for="edit-weight-sas" style="font-size:0.8rem;">Sumatif Akhir Semester (SAS)</label>
+              <input type="number" id="edit-weight-sas" class="edit-weight-input" min="0" max="100" step="1" style="width:100%; padding:8px 12px; border-radius:var(--radius-md); border:1.5px solid var(--border-color); background:var(--bg-main); color:var(--text-main);">
             </div>
           </div>
           <p id="edit-weight-total" class="text-muted" style="font-size:0.8rem; margin-top:6px;"></p>
@@ -1394,43 +1376,6 @@
   </div>
 
   <!-- MODAL: KELOLA KOMPONEN NILAI (kategori + bobot) -->
-  <div id="modal-assessment-component" class="modal-overlay">
-    <div class="modal-content" style="max-width: 420px;">
-      <div class="modal-header">
-        <h3 class="modal-title"><i class="fas fa-list-check"></i> Komponen Nilai Baru</h3>
-        <button class="modal-close" aria-label="Tutup"><i class="fas fa-times"></i></button>
-      </div>
-      <form id="assessment-component-form">
-        <input type="hidden" id="assessment-subject-id" value="">
-        <input type="hidden" id="assessment-return-prefix" value="">
-        <div class="modal-body">
-          <div class="input-group" style="margin-bottom: 12px;">
-            <label for="assessment-comp-category">KATEGORI</label>
-            <div class="input-wrapper">
-              <i class="fas fa-layer-group"></i>
-              <select id="assessment-comp-category">
-                <option value="tugas">Tugas</option>
-                <option value="uh">Ulangan Harian</option>
-              </select>
-            </div>
-          </div>
-          <div class="input-group" style="margin-bottom: 8px;">
-            <label for="assessment-comp-name">NAMA KOMPONEN</label>
-            <div class="input-wrapper">
-              <i class="fas fa-pen"></i>
-              <input type="text" id="assessment-comp-name" placeholder="Contoh: Tugas 2" required>
-            </div>
-          </div>
-          <p class="text-muted" style="font-size: 0.8rem; margin-top: 8px;">UTS &amp; UAS hanya satu per mapel, jadi tidak dapat ditambah di sini. Bobot tiap kategori diatur lewat tombol <strong>Edit</strong> mata pelajaran di Pengaturan.</p>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary modal-close">Batal</button>
-          <button type="submit" class="btn btn-primary">Tambah Komponen</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
   <!-- MODAL: KONFIRMASI AKSI (reusable) -->
   <div id="modal-confirm" class="modal-overlay">
     <div class="modal-content" style="max-width: 440px;">
